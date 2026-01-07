@@ -1,5 +1,9 @@
 <?php
 // admin/index.php - Admin dashboard
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
 session_start();
 require_once '../config.php';
 require_once '../includes/db.php';
@@ -10,14 +14,19 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$db = new Database();
-$stmt = $db->prepare("SELECT is_admin FROM users WHERE id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$user = $stmt->fetch();
+try {
+    $db = new Database();
+    $stmt = $db->prepare("SELECT is_admin FROM users WHERE id = ?");
+    $stmt->execute([$_SESSION['user_id']]);
+    $user = $stmt->fetch();
 
-if (!$user || !$user['is_admin']) {
-    header('Location: ../dashboard.php');
-    exit;
+    if (!$user || !$user['is_admin']) {
+        header('Location: ../dashboard.php');
+        exit;
+    }
+} catch (Exception $e) {
+    error_log("Admin Dashboard Error: " . $e->getMessage());
+    die("Database connection error. Please check your configuration.");
 }
 
 $success = '';
@@ -45,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'Settings updated successfully!';
         } catch (Exception $e) {
             $error = 'Failed to update settings: ' . $e->getMessage();
+            error_log("Settings Update Error: " . $e->getMessage());
         }
     }
     
@@ -62,6 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'Advertisement added successfully!';
         } catch (Exception $e) {
             $error = 'Failed to add advertisement: ' . $e->getMessage();
+            error_log("Add Advertisement Error: " . $e->getMessage());
         }
     }
     
@@ -73,6 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'Advertisement deleted successfully!';
         } catch (Exception $e) {
             $error = 'Failed to delete advertisement: ' . $e->getMessage();
+            error_log("Delete Advertisement Error: " . $e->getMessage());
         }
     }
     
@@ -84,20 +96,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'Advertisement status updated!';
         } catch (Exception $e) {
             $error = 'Failed to update advertisement: ' . $e->getMessage();
+            error_log("Toggle Advertisement Error: " . $e->getMessage());
         }
     }
 }
 
-// Get statistics
-$stats = [
-    'total_users' => $db->query("SELECT COUNT(*) as count FROM users")->fetch()['count'],
-    'total_links' => $db->query("SELECT COUNT(*) as count FROM short_links")->fetch()['count'],
-    'total_clicks' => $db->query("SELECT SUM(clicks) as count FROM short_links")->fetch()['count'] ?? 0,
-    'total_bio_links' => $db->query("SELECT COUNT(*) as count FROM bio_links")->fetch()['count'],
-    'total_earnings' => $db->query("SELECT SUM(earnings) as total FROM users")->fetch()['total'] ?? 0
-];
+// Get statistics with error handling
+try {
+    $stats = [
+        'total_users' => 0,
+        'total_links' => 0,
+        'total_clicks' => 0,
+        'total_bio_links' => 0,
+        'total_earnings' => 0
+    ];
+    
+    $result = $db->query("SELECT COUNT(*) as count FROM users");
+    if ($result) $stats['total_users'] = $result->fetch()['count'];
+    
+    $result = $db->query("SELECT COUNT(*) as count FROM short_links");
+    if ($result) $stats['total_links'] = $result->fetch()['count'];
+    
+    $result = $db->query("SELECT SUM(clicks) as count FROM short_links");
+    if ($result) $stats['total_clicks'] = $result->fetch()['count'] ?? 0;
+    
+    $result = $db->query("SELECT COUNT(*) as count FROM bio_links");
+    if ($result) $stats['total_bio_links'] = $result->fetch()['count'];
+    
+    $result = $db->query("SELECT SUM(earnings) as total FROM users");
+    if ($result) $stats['total_earnings'] = $result->fetch()['total'] ?? 0;
+} catch (Exception $e) {
+    error_log("Statistics Error: " . $e->getMessage());
+    $stats = [
+        'total_users' => 0,
+        'total_links' => 0,
+        'total_clicks' => 0,
+        'total_bio_links' => 0,
+        'total_earnings' => 0
+    ];
+}
 
-$settings = getSettings($db);
+// Get settings with error handling
+try {
+    $settings = getSettings($db);
+} catch (Exception $e) {
+    error_log("getSettings Error: " . $e->getMessage());
+    $settings = [];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -288,6 +333,24 @@ $settings = getSettings($db);
             display: flex;
             gap: 8px;
         }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead tr {
+            border-bottom: 2px solid #e2e8f0;
+        }
+        tbody tr {
+            border-bottom: 1px solid #f1f5f9;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            font-weight: 600;
+            color: #334155;
+        }
         @media (max-width: 768px) {
             .admin-container {
                 flex-direction: column;
@@ -298,8 +361,8 @@ $settings = getSettings($db);
             .form-row {
                 grid-template-columns: 1fr;
             }
-            }
-            </style>
+        }
+    </style>
 </head>
 <body>
     <div class="navbar">
@@ -484,40 +547,45 @@ $settings = getSettings($db);
                     <h2>📋 Existing Advertisements</h2>
                     
                     <?php
-                    $stmt = $db->query("SELECT * FROM advertisements ORDER BY position ASC, created_at DESC");
-                    $ads = $stmt->fetchAll();
-                    
-                    if (empty($ads)):
-                    ?>
-                        <p style="color: #64748b;">No advertisements yet.</p>
-                    <?php else: ?>
-                        <?php foreach ($ads as $ad): ?>
-                        <div class="ad-item">
-                            <div class="ad-info">
-                                <h4><?= htmlspecialchars($ad['title']) ?></h4>
-                                <p><?= htmlspecialchars($ad['url']) ?></p>
-                                <p style="margin-top: 4px;">
-                                    <strong>Status:</strong> 
-                                    <?= $ad['is_active'] ? '<span style="color: #16a34a;">Active</span>' : '<span style="color: #dc2626;">Inactive</span>' ?>
-                                </p>
+                    try {
+                        $stmt = $db->query("SELECT * FROM advertisements ORDER BY position ASC, created_at DESC");
+                        $ads = $stmt->fetchAll();
+                        
+                        if (empty($ads)):
+                        ?>
+                            <p style="color: #64748b;">No advertisements yet.</p>
+                        <?php else: ?>
+                            <?php foreach ($ads as $ad): ?>
+                            <div class="ad-item">
+                                <div class="ad-info">
+                                    <h4><?= htmlspecialchars($ad['title']) ?></h4>
+                                    <p><?= htmlspecialchars($ad['url']) ?></p>
+                                    <p style="margin-top: 4px;">
+                                        <strong>Status:</strong> 
+                                        <?= $ad['is_active'] ? '<span style="color: #16a34a;">Active</span>' : '<span style="color: #dc2626;">Inactive</span>' ?>
+                                    </p>
+                                </div>
+                                <div class="ad-actions">
+                                    <form method="POST" style="display: inline;">
+                                        <input type="hidden" name="action" value="toggle_ad">
+                                        <input type="hidden" name="ad_id" value="<?= $ad['id'] ?>">
+                                        <button type="submit" class="btn-secondary">
+                                            <?= $ad['is_active'] ? 'Deactivate' : 'Activate' ?>
+                                        </button>
+                                    </form>
+                                    <form method="POST" style="display: inline;" onsubmit="return confirm('Delete this ad?');">
+                                        <input type="hidden" name="action" value="delete_ad">
+                                        <input type="hidden" name="ad_id" value="<?= $ad['id'] ?>">
+                                        <button type="submit" class="btn-danger">Delete</button>
+                                    </form>
+                                </div>
                             </div>
-                            <div class="ad-actions">
-                                <form method="POST" style="display: inline;">
-                                    <input type="hidden" name="action" value="toggle_ad">
-                                    <input type="hidden" name="ad_id" value="<?= $ad['id'] ?>">
-                                    <button type="submit" class="btn-secondary">
-                                        <?= $ad['is_active'] ? 'Deactivate' : 'Activate' ?>
-                                    </button>
-                                </form>
-                                <form method="POST" style="display: inline;" onsubmit="return confirm('Delete this ad?');">
-                                    <input type="hidden" name="action" value="delete_ad">
-                                    <input type="hidden" name="ad_id" value="<?= $ad['id'] ?>">
-                                    <button type="submit" class="btn-danger">Delete</button>
-                                </form>
-                            </div>
-                        </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    <?php } catch (Exception $e) {
+                        error_log("Advertisements Query Error: " . $e->getMessage());
+                        echo '<p style="color: #dc2626;">Error loading advertisements.</p>';
+                    } ?>
                 </div>
 
             <?php elseif ($page === 'users'): ?>
@@ -525,36 +593,41 @@ $settings = getSettings($db);
                     <h2>👥 All Users</h2>
                     
                     <?php
-                    $stmt = $db->query("SELECT u.*, COUNT(DISTINCT sl.id) as link_count, SUM(sl.clicks) as total_clicks 
-                                        FROM users u 
-                                        LEFT JOIN short_links sl ON u.id = sl.user_id 
-                                        GROUP BY u.id 
-                                        ORDER BY u.created_at DESC");
-                    $users = $stmt->fetchAll();
+                    try {
+                        $stmt = $db->query("SELECT u.*, COUNT(DISTINCT sl.id) as link_count, SUM(sl.clicks) as total_clicks 
+                                            FROM users u 
+                                            LEFT JOIN short_links sl ON u.id = sl.user_id 
+                                            GROUP BY u.id 
+                                            ORDER BY u.created_at DESC");
+                        $users = $stmt->fetchAll();
                     ?>
                     
-                    <table style="width: 100%; border-collapse: collapse;">
+                    <table>
                         <thead>
-                            <tr style="border-bottom: 2px solid #e2e8f0;">
-                                <th style="padding: 12px; text-align: left;">Username</th>
-                                <th style="padding: 12px; text-align: left;">Email</th>
-                                <th style="padding: 12px; text-align: right;">Links</th>
-                                <th style="padding: 12px; text-align: right;">Clicks</th>
-                                <th style="padding: 12px; text-align: right;">Earnings</th>
+                            <tr>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th style="text-align: right;">Links</th>
+                                <th style="text-align: right;">Clicks</th>
+                                <th style="text-align: right;">Earnings</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($users as $u): ?>
-                            <tr style="border-bottom: 1px solid #f1f5f9;">
-                                <td style="padding: 12px;"><?= htmlspecialchars($u['username']) ?></td>
-                                <td style="padding: 12px;"><?= htmlspecialchars($u['email']) ?></td>
-                                <td style="padding: 12px; text-align: right;"><?= number_format($u['link_count']) ?></td>
-                                <td style="padding: 12px; text-align: right;"><?= number_format($u['total_clicks']) ?></td>
-                                <td style="padding: 12px; text-align: right;">$<?= number_format($u['earnings'], 2) ?></td>
+                            <tr>
+                                <td><?= htmlspecialchars($u['username']) ?></td>
+                                <td><?= htmlspecialchars($u['email']) ?></td>
+                                <td style="text-align: right;"><?= number_format($u['link_count']) ?></td>
+                                <td style="text-align: right;"><?= number_format($u['total_clicks'] ?? 0) ?></td>
+                                <td style="text-align: right;">$<?= number_format($u['earnings'], 2) ?></td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    <?php } catch (Exception $e) {
+                        error_log("Users Query Error: " . $e->getMessage());
+                        echo '<p style="color: #dc2626;">Error loading users data.</p>';
+                    } ?>
                 </div>
 
             <?php elseif ($page === 'links'): ?>
@@ -562,42 +635,47 @@ $settings = getSettings($db);
                     <h2>🔗 Recent Links</h2>
                     
                     <?php
-                    $stmt = $db->query("SELECT sl.*, u.username 
-                                        FROM short_links sl 
-                                        JOIN users u ON sl.user_id = u.id 
-                                        ORDER BY sl.created_at DESC 
-                                        LIMIT 50");
-                    $links = $stmt->fetchAll();
+                    try {
+                        $stmt = $db->query("SELECT sl.*, u.username 
+                                            FROM short_links sl 
+                                            JOIN users u ON sl.user_id = u.id 
+                                            ORDER BY sl.created_at DESC 
+                                            LIMIT 50");
+                        $links = $stmt->fetchAll();
                     ?>
                     
-                    <table style="width: 100%; border-collapse: collapse;">
+                    <table>
                         <thead>
-                            <tr style="border-bottom: 2px solid #e2e8f0;">
-                                <th style="padding: 12px; text-align: left;">Short Code</th>
-                                <th style="padding: 12px; text-align: left;">User</th>
-                                <th style="padding: 12px; text-align: left;">Original URL</th>
-                                <th style="padding: 12px; text-align: right;">Clicks</th>
-                                <th style="padding: 12px; text-align: right;">Earnings</th>
+                            <tr>
+                                <th>Short Code</th>
+                                <th>User</th>
+                                <th>Original URL</th>
+                                <th style="text-align: right;">Clicks</th>
+                                <th style="text-align: right;">Earnings</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($links as $link): ?>
-                            <tr style="border-bottom: 1px solid #f1f5f9;">
-                                <td style="padding: 12px;">
+                            <tr>
+                                <td>
                                     <a href="<?= SITE_URL ?>/<?= htmlspecialchars($link['short_code']) ?>" target="_blank" style="color: #6366f1;">
                                         <?= htmlspecialchars($link['short_code']) ?>
                                     </a>
                                 </td>
-                                <td style="padding: 12px;"><?= htmlspecialchars($link['username']) ?></td>
-                                <td style="padding: 12px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <td><?= htmlspecialchars($link['username']) ?></td>
+                                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                     <?= htmlspecialchars($link['original_url']) ?>
                                 </td>
-                                <td style="padding: 12px; text-align: right;"><?= number_format($link['clicks']) ?></td>
-                                <td style="padding: 12px; text-align: right;">$<?= number_format($link['earnings'], 2) ?></td>
+                                <td style="text-align: right;"><?= number_format($link['clicks']) ?></td>
+                                <td style="text-align: right;">$<?= number_format($link['earnings'], 2) ?></td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    <?php } catch (Exception $e) {
+                        error_log("Links Query Error: " . $e->getMessage());
+                        echo '<p style="color: #dc2626;">Error loading links data.</p>';
+                    } ?>
                 </div>
             <?php endif; ?>
         </div>
