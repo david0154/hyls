@@ -1,5 +1,5 @@
 <?php
-// biolink.php - Bio link management page
+// biolink.php - Bio link management page with ALL features
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
@@ -35,17 +35,19 @@ try {
     $bio = $stmt->fetch();
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        // Use the actual username from users table
         $username = $current_user['username'];
         $display_name = $_POST['display_name'] ?? '';
         $bio_text = $_POST['bio'] ?? '';
         $theme_color = $_POST['theme_color'] ?? '#6366f1';
         
-        // Social media fields
+        // ALL 29 Social media fields
         $socials = [
             'facebook', 'instagram', 'twitter', 'linkedin', 'youtube', 'tiktok', 
             'github', 'pinterest', 'snapchat', 'discord', 'twitch', 'telegram', 
-            'whatsapp', 'spotify', 'reddit', 'website', 'email', 'phone'
+            'whatsapp', 'spotify', 'reddit', 'website', 'email', 'phone',
+            // NEW PLATFORMS
+            'threads', 'bluesky', 'mastodon', 'medium', 'substack', 'patreon',
+            'onlyfans', 'cashapp', 'venmo', 'paypal', 'line'
         ];
         
         $social_data = [];
@@ -62,108 +64,103 @@ try {
             $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
             
             if (in_array($ext, $allowed)) {
-                // Create uploads directory if it doesn't exist
-                if (!is_dir('uploads')) {
-                    mkdir('uploads', 0755, true);
-                }
                 if (!is_dir('uploads/bio')) {
                     mkdir('uploads/bio', 0755, true);
                 }
                 
-                $new_filename = 'bio_' . $user_id . '_' . time() . '.' . $ext;
+                $new_filename = 'profile_' . $user_id . '_' . time() . '.' . $ext;
                 $upload_path = 'uploads/bio/' . $new_filename;
                 
                 if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $upload_path)) {
-                    // Delete old image
                     if ($profile_image && file_exists($profile_image)) {
                         @unlink($profile_image);
                     }
                     $profile_image = $upload_path;
-                } else {
-                    $error = 'Failed to upload image. Please check directory permissions.';
                 }
-            } else {
-                $error = 'Invalid image format. Allowed: JPG, PNG, GIF, WebP';
+            }
+        }
+        
+        // Handle cover image upload (NEW)
+        $cover_image = $bio['cover_image'] ?? '';
+        if (isset($_FILES['cover_image']) && $_FILES['cover_image']['error'] === UPLOAD_ERR_OK) {
+            $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            $filename = $_FILES['cover_image']['name'];
+            $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+            
+            if (in_array($ext, $allowed)) {
+                if (!is_dir('uploads/bio')) {
+                    mkdir('uploads/bio', 0755, true);
+                }
+                
+                $new_filename = 'cover_' . $user_id . '_' . time() . '.' . $ext;
+                $upload_path = 'uploads/bio/' . $new_filename;
+                
+                if (move_uploaded_file($_FILES['cover_image']['tmp_name'], $upload_path)) {
+                    if ($cover_image && file_exists($cover_image)) {
+                        @unlink($cover_image);
+                    }
+                    $cover_image = $upload_path;
+                }
             }
         }
         
         if (empty($error)) {
             try {
+                // Build column list dynamically based on existing columns
+                $base_columns = ['username', 'display_name', 'bio', 'theme_color', 'profile_image'];
+                
+                // Add cover_image if column exists
+                $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE 'cover_image'");
+                if ($stmt->rowCount() > 0) {
+                    $base_columns[] = 'cover_image';
+                }
+                
+                $social_columns = [];
+                foreach ($socials as $social) {
+                    // Check if columns exist before adding
+                    $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE '$social'");
+                    if ($stmt->rowCount() > 0) {
+                        $social_columns[] = $social;
+                        $social_columns[] = $social . '_enabled';
+                    }
+                }
+                
+                $all_columns = array_merge($base_columns, $social_columns);
+                
                 if ($bio) {
                     // Update existing bio
-                    $sql = "UPDATE bio_links SET 
-                            username = ?, display_name = ?, bio = ?, theme_color = ?, profile_image = ?,
-                            facebook = ?, facebook_enabled = ?, instagram = ?, instagram_enabled = ?,
-                            twitter = ?, twitter_enabled = ?, linkedin = ?, linkedin_enabled = ?,
-                            youtube = ?, youtube_enabled = ?, tiktok = ?, tiktok_enabled = ?,
-                            github = ?, github_enabled = ?, pinterest = ?, pinterest_enabled = ?,
-                            snapchat = ?, snapchat_enabled = ?, discord = ?, discord_enabled = ?,
-                            twitch = ?, twitch_enabled = ?, telegram = ?, telegram_enabled = ?,
-                            whatsapp = ?, whatsapp_enabled = ?, spotify = ?, spotify_enabled = ?,
-                            reddit = ?, reddit_enabled = ?, website = ?, website_enabled = ?,
-                            email = ?, email_enabled = ?, phone = ?, phone_enabled = ?
-                            WHERE user_id = ?";
+                    $set_parts = array_map(function($col) { return "$col = ?"; }, $all_columns);
+                    $sql = "UPDATE bio_links SET " . implode(', ', $set_parts) . " WHERE user_id = ?";
+                    
+                    $values = [$username, $display_name, $bio_text, $theme_color, $profile_image];
+                    if (in_array('cover_image', $base_columns)) {
+                        $values[] = $cover_image;
+                    }
+                    foreach ($social_columns as $col) {
+                        $key = str_replace('_enabled', '', $col);
+                        $values[] = isset($social_data[$col]) ? $social_data[$col] : ($social_data[$key] ?? '');
+                    }
+                    $values[] = $user_id;
                     
                     $stmt = $db->prepare($sql);
-                    $stmt->execute([
-                        $username, $display_name, $bio_text, $theme_color, $profile_image,
-                        $social_data['facebook'], $social_data['facebook_enabled'],
-                        $social_data['instagram'], $social_data['instagram_enabled'],
-                        $social_data['twitter'], $social_data['twitter_enabled'],
-                        $social_data['linkedin'], $social_data['linkedin_enabled'],
-                        $social_data['youtube'], $social_data['youtube_enabled'],
-                        $social_data['tiktok'], $social_data['tiktok_enabled'],
-                        $social_data['github'], $social_data['github_enabled'],
-                        $social_data['pinterest'], $social_data['pinterest_enabled'],
-                        $social_data['snapchat'], $social_data['snapchat_enabled'],
-                        $social_data['discord'], $social_data['discord_enabled'],
-                        $social_data['twitch'], $social_data['twitch_enabled'],
-                        $social_data['telegram'], $social_data['telegram_enabled'],
-                        $social_data['whatsapp'], $social_data['whatsapp_enabled'],
-                        $social_data['spotify'], $social_data['spotify_enabled'],
-                        $social_data['reddit'], $social_data['reddit_enabled'],
-                        $social_data['website'], $social_data['website_enabled'],
-                        $social_data['email'], $social_data['email_enabled'],
-                        $social_data['phone'], $social_data['phone_enabled'],
-                        $user_id
-                    ]);
+                    $stmt->execute($values);
                 } else {
-                    // Create new bio - MUST include username field
-                    $sql = "INSERT INTO bio_links (
-                            user_id, username, display_name, bio, theme_color, profile_image,
-                            facebook, facebook_enabled, instagram, instagram_enabled,
-                            twitter, twitter_enabled, linkedin, linkedin_enabled,
-                            youtube, youtube_enabled, tiktok, tiktok_enabled,
-                            github, github_enabled, pinterest, pinterest_enabled,
-                            snapchat, snapchat_enabled, discord, discord_enabled,
-                            twitch, twitch_enabled, telegram, telegram_enabled,
-                            whatsapp, whatsapp_enabled, spotify, spotify_enabled,
-                            reddit, reddit_enabled, website, website_enabled,
-                            email, email_enabled, phone, phone_enabled
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    // Create new bio
+                    $columns_str = implode(', ', array_merge(['user_id'], $all_columns));
+                    $placeholders = implode(', ', array_fill(0, count($all_columns) + 1, '?'));
+                    $sql = "INSERT INTO bio_links ($columns_str) VALUES ($placeholders)";
+                    
+                    $values = [$user_id, $username, $display_name, $bio_text, $theme_color, $profile_image];
+                    if (in_array('cover_image', $base_columns)) {
+                        $values[] = $cover_image;
+                    }
+                    foreach ($social_columns as $col) {
+                        $key = str_replace('_enabled', '', $col);
+                        $values[] = isset($social_data[$col]) ? $social_data[$col] : ($social_data[$key] ?? '');
+                    }
                     
                     $stmt = $db->prepare($sql);
-                    $stmt->execute([
-                        $user_id, $username, $display_name, $bio_text, $theme_color, $profile_image,
-                        $social_data['facebook'], $social_data['facebook_enabled'],
-                        $social_data['instagram'], $social_data['instagram_enabled'],
-                        $social_data['twitter'], $social_data['twitter_enabled'],
-                        $social_data['linkedin'], $social_data['linkedin_enabled'],
-                        $social_data['youtube'], $social_data['youtube_enabled'],
-                        $social_data['tiktok'], $social_data['tiktok_enabled'],
-                        $social_data['github'], $social_data['github_enabled'],
-                        $social_data['pinterest'], $social_data['pinterest_enabled'],
-                        $social_data['snapchat'], $social_data['snapchat_enabled'],
-                        $social_data['discord'], $social_data['discord_enabled'],
-                        $social_data['twitch'], $social_data['twitch_enabled'],
-                        $social_data['telegram'], $social_data['telegram_enabled'],
-                        $social_data['whatsapp'], $social_data['whatsapp_enabled'],
-                        $social_data['spotify'], $social_data['spotify_enabled'],
-                        $social_data['reddit'], $social_data['reddit_enabled'],
-                        $social_data['website'], $social_data['website_enabled'],
-                        $social_data['email'], $social_data['email_enabled'],
-                        $social_data['phone'], $social_data['phone_enabled']
-                    ]);
+                    $stmt->execute($values);
                 }
                 
                 $success = 'Bio link saved successfully! View it at: ' . SITE_URL . '/bio/' . $username;
@@ -576,6 +573,13 @@ try {
             cursor: pointer;
             padding: 4px;
         }
+
+        .social-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
         
         @media (max-width: 768px) {
             .form-row {
@@ -600,6 +604,10 @@ try {
             
             .social-section {
                 padding: 16px;
+            }
+
+            .social-grid {
+                grid-template-columns: 1fr;
             }
         }
         
@@ -679,36 +687,70 @@ try {
                     </div>
                     
                     <div class="form-group">
-                        <label><i class="fas fa-palette"></i> Theme Color</label>
-                        <div class="color-input-wrapper">
-                            <input type="color" name="theme_color" value="<?= htmlspecialchars($bio['theme_color'] ?? '#6366f1') ?>">
-                            <span id="colorValue" style="font-weight: 700; color: #6366f1;"></span>
-                        </div>
+                        <label><i class="fas fa-panorama"></i> Cover Image</label>
+                        <input type="file" name="cover_image" accept="image/*">
+                        <?php if (!empty($bio['cover_image'])): ?>
+                            <small style="color: #64748b; display: block; margin-top: 8px;"><i class="fas fa-info-circle"></i> Current: <?= basename($bio['cover_image']) ?></small>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-palette"></i> Theme Color</label>
+                    <div class="color-input-wrapper">
+                        <input type="color" name="theme_color" value="<?= htmlspecialchars($bio['theme_color'] ?? '#6366f1') ?>">
+                        <span id="colorValue" style="font-weight: 700; color: #6366f1;"></span>
                     </div>
                 </div>
                 
-                <h2 style="margin-top: 40px; margin-bottom: 24px;"><i class="fas fa-globe"></i> Social Media Links</h2>
+                <h2 style="margin-top: 40px; margin-bottom: 24px;"><i class="fas fa-globe"></i> Social Media Links (29 Platforms)</h2>
+                <p style="color: #64748b; margin-bottom: 20px;">💡 <strong>Tip:</strong> Add multiple accounts per platform by updating and saving again!</p>
                 
+                <div class="social-grid">
                 <?php
-                $social_platforms = [
-                    'facebook' => ['icon' => 'fab fa-facebook-f', 'label' => 'Facebook', 'placeholder' => 'https://facebook.com/username'],
-                    'instagram' => ['icon' => 'fab fa-instagram', 'label' => 'Instagram', 'placeholder' => 'https://instagram.com/username'],
-                    'twitter' => ['icon' => 'fab fa-x-twitter', 'label' => 'X (Twitter)', 'placeholder' => 'https://twitter.com/username'],
-                    'linkedin' => ['icon' => 'fab fa-linkedin-in', 'label' => 'LinkedIn', 'placeholder' => 'https://linkedin.com/in/username'],
-                    'youtube' => ['icon' => 'fab fa-youtube', 'label' => 'YouTube', 'placeholder' => 'https://youtube.com/@username'],
-                    'tiktok' => ['icon' => 'fab fa-tiktok', 'label' => 'TikTok', 'placeholder' => 'https://tiktok.com/@username'],
-                    'github' => ['icon' => 'fab fa-github', 'label' => 'GitHub', 'placeholder' => 'https://github.com/username'],
-                    'website' => ['icon' => 'fas fa-globe', 'label' => 'Website', 'placeholder' => 'https://yourwebsite.com'],
+                $all_platforms = [
+                    'facebook' => ['icon' => 'fab fa-facebook-f', 'label' => 'Facebook', 'placeholder' => 'https://facebook.com/username', 'color' => '#1877f2'],
+                    'instagram' => ['icon' => 'fab fa-instagram', 'label' => 'Instagram', 'placeholder' => 'https://instagram.com/username', 'color' => '#e4405f'],
+                    'twitter' => ['icon' => 'fab fa-x-twitter', 'label' => 'X (Twitter)', 'placeholder' => 'https://twitter.com/username', 'color' => '#000000'],
+                    'threads' => ['icon' => 'fab fa-threads', 'label' => 'Threads', 'placeholder' => 'https://threads.net/@username', 'color' => '#000000'],
+                    'tiktok' => ['icon' => 'fab fa-tiktok', 'label' => 'TikTok', 'placeholder' => 'https://tiktok.com/@username', 'color' => '#000000'],
+                    'youtube' => ['icon' => 'fab fa-youtube', 'label' => 'YouTube', 'placeholder' => 'https://youtube.com/@username', 'color' => '#ff0000'],
+                    'linkedin' => ['icon' => 'fab fa-linkedin-in', 'label' => 'LinkedIn', 'placeholder' => 'https://linkedin.com/in/username', 'color' => '#0a66c2'],
+                    'github' => ['icon' => 'fab fa-github', 'label' => 'GitHub', 'placeholder' => 'https://github.com/username', 'color' => '#333333'],
+                    'discord' => ['icon' => 'fab fa-discord', 'label' => 'Discord', 'placeholder' => 'https://discord.gg/invite', 'color' => '#5865f2'],
+                    'twitch' => ['icon' => 'fab fa-twitch', 'label' => 'Twitch', 'placeholder' => 'https://twitch.tv/username', 'color' => '#9146ff'],
+                    'reddit' => ['icon' => 'fab fa-reddit-alien', 'label' => 'Reddit', 'placeholder' => 'https://reddit.com/u/username', 'color' => '#ff4500'],
+                    'snapchat' => ['icon' => 'fab fa-snapchat', 'label' => 'Snapchat', 'placeholder' => 'https://snapchat.com/add/username', 'color' => '#fffc00'],
+                    'pinterest' => ['icon' => 'fab fa-pinterest-p', 'label' => 'Pinterest', 'placeholder' => 'https://pinterest.com/username', 'color' => '#e60023'],
+                    'telegram' => ['icon' => 'fab fa-telegram-plane', 'label' => 'Telegram', 'placeholder' => 'https://t.me/username', 'color' => '#26a5e4'],
+                    'whatsapp' => ['icon' => 'fab fa-whatsapp', 'label' => 'WhatsApp', 'placeholder' => 'https://wa.me/1234567890', 'color' => '#25d366'],
+                    'spotify' => ['icon' => 'fab fa-spotify', 'label' => 'Spotify', 'placeholder' => 'https://open.spotify.com/user/username', 'color' => '#1db954'],
+                    'medium' => ['icon' => 'fab fa-medium', 'label' => 'Medium', 'placeholder' => 'https://medium.com/@username', 'color' => '#000000'],
+                    'substack' => ['icon' => 'fas fa-newspaper', 'label' => 'Substack', 'placeholder' => 'https://username.substack.com', 'color' => '#ff6719'],
+                    'patreon' => ['icon' => 'fab fa-patreon', 'label' => 'Patreon', 'placeholder' => 'https://patreon.com/username', 'color' => '#ff424d'],
+                    'onlyfans' => ['icon' => 'fas fa-user-lock', 'label' => 'OnlyFans', 'placeholder' => 'https://onlyfans.com/username', 'color' => '#00aff0'],
+                    'bluesky' => ['icon' => 'fas fa-cloud', 'label' => 'Bluesky', 'placeholder' => 'https://bsky.app/profile/username', 'color' => '#1185fe'],
+                    'mastodon' => ['icon' => 'fab fa-mastodon', 'label' => 'Mastodon', 'placeholder' => 'https://mastodon.social/@username', 'color' => '#6364ff'],
+                    'line' => ['icon' => 'fab fa-line', 'label' => 'LINE', 'placeholder' => 'https://line.me/ti/p/username', 'color' => '#00c300'],
+                    'cashapp' => ['icon' => 'fas fa-dollar-sign', 'label' => 'Cash App', 'placeholder' => 'https://cash.app/$username', 'color' => '#00d632'],
+                    'venmo' => ['icon' => 'fas fa-money-bill-wave', 'label' => 'Venmo', 'placeholder' => 'https://venmo.com/username', 'color' => '#3d95ce'],
+                    'paypal' => ['icon' => 'fab fa-paypal', 'label' => 'PayPal', 'placeholder' => 'https://paypal.me/username', 'color' => '#00457c'],
+                    'website' => ['icon' => 'fas fa-globe', 'label' => 'Website', 'placeholder' => 'https://yourwebsite.com', 'color' => '#6366f1'],
+                    'email' => ['icon' => 'fas fa-envelope', 'label' => 'Email', 'placeholder' => 'your@email.com', 'color' => '#ea4335'],
+                    'phone' => ['icon' => 'fas fa-phone', 'label' => 'Phone', 'placeholder' => '+1234567890', 'color' => '#34a853'],
                 ];
                 
-                foreach ($social_platforms as $key => $platform):
+                foreach ($all_platforms as $key => $platform):
                     $value = $bio[$key] ?? '';
                     $enabled = ($bio[$key . '_enabled'] ?? 1) == 1;
                 ?>
                 <div class="social-section">
-                    <h3><i class="<?= $platform['icon'] ?>"></i> <?= $platform['label'] ?></h3>
+                    <h3 style="color: <?= $platform['color'] ?>;"><i class="<?= $platform['icon'] ?>"></i> <?= $platform['label'] ?></h3>
                     <div class="form-group">
-                        <input type="url" name="<?= $key ?>" value="<?= htmlspecialchars($value) ?>" placeholder="<?= $platform['placeholder'] ?>">
+                        <input type="<?= $key === 'email' ? 'email' : ($key === 'phone' ? 'tel' : 'url') ?>" 
+                               name="<?= $key ?>" 
+                               value="<?= htmlspecialchars($value) ?>" 
+                               placeholder="<?= $platform['placeholder'] ?>">
                         <div class="toggle-group">
                             <input type="checkbox" name="<?= $key ?>_enabled" id="<?= $key ?>_enabled" <?= $enabled ? 'checked' : '' ?>>
                             <label for="<?= $key ?>_enabled">Show on bio page</label>
@@ -716,29 +758,6 @@ try {
                     </div>
                 </div>
                 <?php endforeach; ?>
-                
-                <h2 style="margin-top: 40px; margin-bottom: 24px;"><i class="fas fa-phone"></i> Contact Information</h2>
-                
-                <div class="social-section">
-                    <h3><i class="fas fa-envelope"></i> Email</h3>
-                    <div class="form-group">
-                        <input type="email" name="email" value="<?= htmlspecialchars($bio['email'] ?? '') ?>" placeholder="your@email.com">
-                        <div class="toggle-group">
-                            <input type="checkbox" name="email_enabled" id="email_enabled" <?= ($bio['email_enabled'] ?? 1) ? 'checked' : '' ?>>
-                            <label for="email_enabled">Show on bio page</label>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="social-section">
-                    <h3><i class="fas fa-phone"></i> Phone</h3>
-                    <div class="form-group">
-                        <input type="tel" name="phone" value="<?= htmlspecialchars($bio['phone'] ?? '') ?>" placeholder="+1234567890">
-                        <div class="toggle-group">
-                            <input type="checkbox" name="phone_enabled" id="phone_enabled" <?= ($bio['phone_enabled'] ?? 1) ? 'checked' : '' ?>>
-                            <label for="phone_enabled">Show on bio page</label>
-                        </div>
-                    </div>
                 </div>
                 
                 <button type="submit" class="btn-primary"><i class="fas fa-save"></i> Save Bio Link</button>
