@@ -4,12 +4,14 @@ session_start();
 // ===========================
 // SMART INSTALLATION WIZARD
 // Detects existing installations and offers repair without data loss
+// Includes automatic database migration for missing columns
 // ===========================
 
 $mode = 'install'; // install or repair
 $existing_config = false;
 $database_exists = false;
 $config_data = [];
+$migration_messages = [];
 
 // Check if config.php exists
 if (file_exists('config.php')) {
@@ -64,11 +66,47 @@ if (isset($_GET['mode'])) {
 $error = '';
 $success = '';
 
+// ===========================
+// AUTO-MIGRATION FUNCTION
+// Automatically adds missing columns to existing tables
+// ===========================
+function auto_migrate_database($pdo) {
+    $migrations = [];
+    
+    try {
+        // Check and add missing columns to short_links table
+        $stmt = $pdo->query("SHOW COLUMNS FROM short_links LIKE 'is_banned'");
+        if ($stmt->rowCount() == 0) {
+            $pdo->exec("ALTER TABLE short_links ADD COLUMN is_banned TINYINT(1) DEFAULT 0 AFTER earnings");
+            $migrations[] = '✅ Added is_banned column to short_links';
+        }
+        
+        $stmt = $pdo->query("SHOW COLUMNS FROM short_links LIKE 'ban_reason'");
+        if ($stmt->rowCount() == 0) {
+            $pdo->exec("ALTER TABLE short_links ADD COLUMN ban_reason TEXT DEFAULT NULL AFTER is_banned");
+            $migrations[] = '✅ Added ban_reason column to short_links';
+        }
+        
+        $stmt = $pdo->query("SHOW COLUMNS FROM short_links LIKE 'banned_at'");
+        if ($stmt->rowCount() == 0) {
+            $pdo->exec("ALTER TABLE short_links ADD COLUMN banned_at TIMESTAMP NULL DEFAULT NULL AFTER ban_reason");
+            $migrations[] = '✅ Added banned_at column to short_links';
+        }
+        
+        // Add more migration checks here as needed for future updates
+        
+    } catch (Exception $e) {
+        $migrations[] = '⚠️ Migration warning: ' . $e->getMessage();
+    }
+    
+    return $migrations;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? 'install';
     
     if ($action === 'repair') {
-        // REPAIR MODE: Update config.php only, don't touch database
+        // REPAIR MODE: Update config.php AND run auto-migration
         try {
             $db_host = $_POST['db_host'] ?? 'localhost';
             $db_name = $_POST['db_name'] ?? '';
@@ -90,6 +128,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Test database connection
             $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8mb4", $db_user, $db_pass);
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            
+            // Run auto-migration
+            $migration_messages = auto_migrate_database($pdo);
             
             // Backup old config
             if (file_exists('config.php')) {
@@ -119,8 +160,9 @@ define('SMTP_FROM', " . var_export($smtp_from, true) . ");
             file_put_contents('config.php', $config_content);
             chmod('config.php', 0644);
             
-            $success = '✅ Configuration repaired successfully! Your data is safe. Redirecting...';
-            echo "<script>setTimeout(function(){ window.location.href='index.php'; }, 2000);</script>";
+            $migration_summary = empty($migration_messages) ? '' : '<br><br><strong>Migrations:</strong><br>' . implode('<br>', $migration_messages);
+            $success = '✅ Configuration repaired successfully! Your data is safe.' . $migration_summary . '<br><br>Redirecting...';
+            echo "<script>setTimeout(function(){ window.location.href='index.php'; }, 3000);</script>";
             
         } catch (Exception $e) {
             $error = 'Repair failed: ' . $e->getMessage();
@@ -133,7 +175,7 @@ define('SMTP_FROM', " . var_export($smtp_from, true) . ");
         }
         
     } else {
-        // INSTALL MODE: Full installation
+        // INSTALL MODE: Full installation with latest schema
         $db_host = $_POST['db_host'] ?? 'localhost';
         $db_name = $_POST['db_name'] ?? '';
         $db_user = $_POST['db_user'] ?? '';
@@ -161,6 +203,7 @@ define('SMTP_FROM', " . var_export($smtp_from, true) . ");
             $pdo->exec("CREATE DATABASE IF NOT EXISTS `$db_name` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
             $pdo->exec("USE `$db_name`");
             
+            // Updated schema with is_banned columns included
             $sql = "
             CREATE TABLE IF NOT EXISTS `users` (
               `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -189,6 +232,9 @@ define('SMTP_FROM', " . var_export($smtp_from, true) . ");
               `title` varchar(255) DEFAULT NULL,
               `clicks` int(11) DEFAULT 0,
               `earnings` decimal(10,2) DEFAULT 0.00,
+              `is_banned` tinyint(1) DEFAULT 0,
+              `ban_reason` text DEFAULT NULL,
+              `banned_at` timestamp NULL DEFAULT NULL,
               `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
               PRIMARY KEY (`id`),
               UNIQUE KEY `short_code` (`short_code`),
@@ -532,6 +578,7 @@ define('SMTP_FROM', " . var_export($smtp_from, true) . ");
             border-radius: 8px;
             margin-bottom: 20px;
             font-size: 14px;
+            line-height: 1.6;
         }
         .alert-error {
             background: #fee2e2;
@@ -580,7 +627,7 @@ define('SMTP_FROM', " . var_export($smtp_from, true) . ");
             <h1>🔗 HYLS</h1>
             <p>HypeLink Shortener - <?= $mode === 'repair' ? 'Repair Wizard' : 'Installation Wizard' ?></p>
             <span class="mode-badge <?= $mode ?>">
-                <?= $mode === 'repair' ? '🔧 REPAIR MODE' : '🚀 NEW INSTALLATION' ?>
+                <?= $mode === 'repair' ? '🔧 REPAIR MODE (with Auto-Migration)' : '🚀 NEW INSTALLATION' ?>
             </span>
         </div>
 
@@ -590,12 +637,13 @@ define('SMTP_FROM', " . var_export($smtp_from, true) . ");
                 <p>We found an existing HYLS installation with data. This repair mode will:</p>
                 <ul>
                     <li>✅ Update your config.php file</li>
+                    <li>✅ Automatically migrate missing database columns (e.g., is_banned)</li>
                     <li>✅ Keep all your existing data (users, links, settings)</li>
                     <li>✅ Test database connectivity</li>
                     <li>✅ Create automatic backup of current config</li>
-                    <li>❌ NOT delete or modify your database</li>
+                    <li>❌ NOT delete or modify your existing data</li>
                 </ul>
-                <p><strong>Your data is safe!</strong></p>
+                <p><strong>Your data is safe! Perfect for forks and upgrades.</strong></p>
             </div>
         <?php elseif ($mode === 'repair' && $existing_config && !$database_exists): ?>
             <div class="info-box warning">
@@ -615,7 +663,7 @@ define('SMTP_FROM', " . var_export($smtp_from, true) . ");
         <?php endif; ?>
 
         <?php if ($success): ?>
-            <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
+            <div class="alert alert-success"><?= $success ?></div>
         <?php endif; ?>
 
         <form method="POST">
@@ -744,7 +792,7 @@ define('SMTP_FROM', " . var_export($smtp_from, true) . ");
             </div>
 
             <button type="submit">
-                <?= $mode === 'repair' ? '🔧 Repair Configuration' : '🚀 Install HYLS' ?>
+                <?= $mode === 'repair' ? '🔧 Repair & Migrate' : '🚀 Install HYLS' ?>
             </button>
         </form>
 
