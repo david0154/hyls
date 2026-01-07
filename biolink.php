@@ -1,5 +1,9 @@
 <?php
 // biolink.php - Bio link management page
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
 session_start();
 require_once 'config.php';
 require_once 'includes/db.php';
@@ -10,147 +14,182 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$db = new Database();
-$user_id = $_SESSION['user_id'];
-$success = '';
-$error = '';
+try {
+    $db = new Database();
+    $user_id = $_SESSION['user_id'];
+    $success = '';
+    $error = '';
 
-// Get or create bio link
-$stmt = $db->prepare("SELECT * FROM bio_links WHERE user_id = ?");
-$stmt->execute([$user_id]);
-$bio = $stmt->fetch();
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = $_POST['username'] ?? '';
-    $display_name = $_POST['display_name'] ?? '';
-    $bio_text = $_POST['bio'] ?? '';
-    $theme_color = $_POST['theme_color'] ?? '#6366f1';
+    // Get current user info
+    $stmt = $db->prepare("SELECT username FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $current_user = $stmt->fetch();
     
-    // Social media fields
-    $socials = [
-        'facebook', 'instagram', 'twitter', 'linkedin', 'youtube', 'tiktok', 
-        'github', 'pinterest', 'snapchat', 'discord', 'twitch', 'telegram', 
-        'whatsapp', 'spotify', 'reddit', 'website', 'email', 'phone'
-    ];
-    
-    $social_data = [];
-    foreach ($socials as $social) {
-        $social_data[$social] = $_POST[$social] ?? '';
-        $social_data[$social . '_enabled'] = isset($_POST[$social . '_enabled']) ? 1 : 0;
+    if (!$current_user) {
+        die("User not found");
     }
-    
-    // Handle profile image upload
-    $profile_image = $bio['profile_image'] ?? '';
-    if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
-        $allowed = ['jpg', 'jpeg', 'png', 'gif'];
-        $filename = $_FILES['profile_image']['name'];
-        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+    // Get or create bio link
+    $stmt = $db->prepare("SELECT * FROM bio_links WHERE user_id = ?");
+    $stmt->execute([$user_id]);
+    $bio = $stmt->fetch();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // Use the actual username from users table
+        $username = $current_user['username'];
+        $display_name = $_POST['display_name'] ?? '';
+        $bio_text = $_POST['bio'] ?? '';
+        $theme_color = $_POST['theme_color'] ?? '#6366f1';
         
-        if (in_array($ext, $allowed)) {
-            $new_filename = 'bio_' . $user_id . '_' . time() . '.' . $ext;
-            $upload_path = 'uploads/bio/' . $new_filename;
+        // Social media fields
+        $socials = [
+            'facebook', 'instagram', 'twitter', 'linkedin', 'youtube', 'tiktok', 
+            'github', 'pinterest', 'snapchat', 'discord', 'twitch', 'telegram', 
+            'whatsapp', 'spotify', 'reddit', 'website', 'email', 'phone'
+        ];
+        
+        $social_data = [];
+        foreach ($socials as $social) {
+            $social_data[$social] = $_POST[$social] ?? '';
+            $social_data[$social . '_enabled'] = isset($_POST[$social . '_enabled']) ? 1 : 0;
+        }
+        
+        // Handle profile image upload
+        $profile_image = $bio['profile_image'] ?? '';
+        if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
+            $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            $filename = $_FILES['profile_image']['name'];
+            $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
             
-            if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $upload_path)) {
-                // Delete old image
-                if ($profile_image && file_exists($profile_image)) {
-                    unlink($profile_image);
+            if (in_array($ext, $allowed)) {
+                // Create uploads directory if it doesn't exist
+                if (!is_dir('uploads')) {
+                    mkdir('uploads', 0755, true);
                 }
-                $profile_image = $upload_path;
+                if (!is_dir('uploads/bio')) {
+                    mkdir('uploads/bio', 0755, true);
+                }
+                
+                $new_filename = 'bio_' . $user_id . '_' . time() . '.' . $ext;
+                $upload_path = 'uploads/bio/' . $new_filename;
+                
+                if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $upload_path)) {
+                    // Delete old image
+                    if ($profile_image && file_exists($profile_image)) {
+                        @unlink($profile_image);
+                    }
+                    $profile_image = $upload_path;
+                } else {
+                    $error = 'Failed to upload image. Please check directory permissions.';
+                }
+            } else {
+                $error = 'Invalid image format. Allowed: JPG, PNG, GIF, WebP';
+            }
+        }
+        
+        if (empty($error)) {
+            try {
+                if ($bio) {
+                    // Update existing bio
+                    $sql = "UPDATE bio_links SET 
+                            display_name = ?, bio = ?, theme_color = ?, profile_image = ?,
+                            facebook = ?, facebook_enabled = ?, instagram = ?, instagram_enabled = ?,
+                            twitter = ?, twitter_enabled = ?, linkedin = ?, linkedin_enabled = ?,
+                            youtube = ?, youtube_enabled = ?, tiktok = ?, tiktok_enabled = ?,
+                            github = ?, github_enabled = ?, pinterest = ?, pinterest_enabled = ?,
+                            snapchat = ?, snapchat_enabled = ?, discord = ?, discord_enabled = ?,
+                            twitch = ?, twitch_enabled = ?, telegram = ?, telegram_enabled = ?,
+                            whatsapp = ?, whatsapp_enabled = ?, spotify = ?, spotify_enabled = ?,
+                            reddit = ?, reddit_enabled = ?, website = ?, website_enabled = ?,
+                            email = ?, email_enabled = ?, phone = ?, phone_enabled = ?,
+                            updated_at = NOW()
+                            WHERE user_id = ?";
+                    
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute([
+                        $display_name, $bio_text, $theme_color, $profile_image,
+                        $social_data['facebook'], $social_data['facebook_enabled'],
+                        $social_data['instagram'], $social_data['instagram_enabled'],
+                        $social_data['twitter'], $social_data['twitter_enabled'],
+                        $social_data['linkedin'], $social_data['linkedin_enabled'],
+                        $social_data['youtube'], $social_data['youtube_enabled'],
+                        $social_data['tiktok'], $social_data['tiktok_enabled'],
+                        $social_data['github'], $social_data['github_enabled'],
+                        $social_data['pinterest'], $social_data['pinterest_enabled'],
+                        $social_data['snapchat'], $social_data['snapchat_enabled'],
+                        $social_data['discord'], $social_data['discord_enabled'],
+                        $social_data['twitch'], $social_data['twitch_enabled'],
+                        $social_data['telegram'], $social_data['telegram_enabled'],
+                        $social_data['whatsapp'], $social_data['whatsapp_enabled'],
+                        $social_data['spotify'], $social_data['spotify_enabled'],
+                        $social_data['reddit'], $social_data['reddit_enabled'],
+                        $social_data['website'], $social_data['website_enabled'],
+                        $social_data['email'], $social_data['email_enabled'],
+                        $social_data['phone'], $social_data['phone_enabled'],
+                        $user_id
+                    ]);
+                } else {
+                    // Create new bio
+                    $sql = "INSERT INTO bio_links (
+                            user_id, display_name, bio, theme_color, profile_image,
+                            facebook, facebook_enabled, instagram, instagram_enabled,
+                            twitter, twitter_enabled, linkedin, linkedin_enabled,
+                            youtube, youtube_enabled, tiktok, tiktok_enabled,
+                            github, github_enabled, pinterest, pinterest_enabled,
+                            snapchat, snapchat_enabled, discord, discord_enabled,
+                            twitch, twitch_enabled, telegram, telegram_enabled,
+                            whatsapp, whatsapp_enabled, spotify, spotify_enabled,
+                            reddit, reddit_enabled, website, website_enabled,
+                            email, email_enabled, phone, phone_enabled,
+                            created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+                    
+                    $stmt = $db->prepare($sql);
+                    $stmt->execute([
+                        $user_id, $display_name, $bio_text, $theme_color, $profile_image,
+                        $social_data['facebook'], $social_data['facebook_enabled'],
+                        $social_data['instagram'], $social_data['instagram_enabled'],
+                        $social_data['twitter'], $social_data['twitter_enabled'],
+                        $social_data['linkedin'], $social_data['linkedin_enabled'],
+                        $social_data['youtube'], $social_data['youtube_enabled'],
+                        $social_data['tiktok'], $social_data['tiktok_enabled'],
+                        $social_data['github'], $social_data['github_enabled'],
+                        $social_data['pinterest'], $social_data['pinterest_enabled'],
+                        $social_data['snapchat'], $social_data['snapchat_enabled'],
+                        $social_data['discord'], $social_data['discord_enabled'],
+                        $social_data['twitch'], $social_data['twitch_enabled'],
+                        $social_data['telegram'], $social_data['telegram_enabled'],
+                        $social_data['whatsapp'], $social_data['whatsapp_enabled'],
+                        $social_data['spotify'], $social_data['spotify_enabled'],
+                        $social_data['reddit'], $social_data['reddit_enabled'],
+                        $social_data['website'], $social_data['website_enabled'],
+                        $social_data['email'], $social_data['email_enabled'],
+                        $social_data['phone'], $social_data['phone_enabled']
+                    ]);
+                }
+                
+                $success = 'Bio link saved successfully! View it at: ' . SITE_URL . '/bio/' . $username;
+                
+                // Refresh bio data
+                $stmt = $db->prepare("SELECT * FROM bio_links WHERE user_id = ?");
+                $stmt->execute([$user_id]);
+                $bio = $stmt->fetch();
+                
+            } catch (Exception $e) {
+                $error = 'Failed to save bio link: ' . $e->getMessage();
+                error_log("Bio Link Save Error: " . $e->getMessage());
             }
         }
     }
-    
-    try {
-        if ($bio) {
-            // Update existing bio
-            $sql = "UPDATE bio_links SET 
-                    username = ?, display_name = ?, bio = ?, theme_color = ?, profile_image = ?,
-                    facebook = ?, facebook_enabled = ?, instagram = ?, instagram_enabled = ?,
-                    twitter = ?, twitter_enabled = ?, linkedin = ?, linkedin_enabled = ?,
-                    youtube = ?, youtube_enabled = ?, tiktok = ?, tiktok_enabled = ?,
-                    github = ?, github_enabled = ?, pinterest = ?, pinterest_enabled = ?,
-                    snapchat = ?, snapchat_enabled = ?, discord = ?, discord_enabled = ?,
-                    twitch = ?, twitch_enabled = ?, telegram = ?, telegram_enabled = ?,
-                    whatsapp = ?, whatsapp_enabled = ?, spotify = ?, spotify_enabled = ?,
-                    reddit = ?, reddit_enabled = ?, website = ?, website_enabled = ?,
-                    email = ?, email_enabled = ?, phone = ?, phone_enabled = ?
-                    WHERE user_id = ?";
-            
-            $stmt = $db->prepare($sql);
-            $stmt->execute([
-                $username, $display_name, $bio_text, $theme_color, $profile_image,
-                $social_data['facebook'], $social_data['facebook_enabled'],
-                $social_data['instagram'], $social_data['instagram_enabled'],
-                $social_data['twitter'], $social_data['twitter_enabled'],
-                $social_data['linkedin'], $social_data['linkedin_enabled'],
-                $social_data['youtube'], $social_data['youtube_enabled'],
-                $social_data['tiktok'], $social_data['tiktok_enabled'],
-                $social_data['github'], $social_data['github_enabled'],
-                $social_data['pinterest'], $social_data['pinterest_enabled'],
-                $social_data['snapchat'], $social_data['snapchat_enabled'],
-                $social_data['discord'], $social_data['discord_enabled'],
-                $social_data['twitch'], $social_data['twitch_enabled'],
-                $social_data['telegram'], $social_data['telegram_enabled'],
-                $social_data['whatsapp'], $social_data['whatsapp_enabled'],
-                $social_data['spotify'], $social_data['spotify_enabled'],
-                $social_data['reddit'], $social_data['reddit_enabled'],
-                $social_data['website'], $social_data['website_enabled'],
-                $social_data['email'], $social_data['email_enabled'],
-                $social_data['phone'], $social_data['phone_enabled'],
-                $user_id
-            ]);
-        } else {
-            // Create new bio
-            $sql = "INSERT INTO bio_links (
-                    user_id, username, display_name, bio, theme_color, profile_image,
-                    facebook, facebook_enabled, instagram, instagram_enabled,
-                    twitter, twitter_enabled, linkedin, linkedin_enabled,
-                    youtube, youtube_enabled, tiktok, tiktok_enabled,
-                    github, github_enabled, pinterest, pinterest_enabled,
-                    snapchat, snapchat_enabled, discord, discord_enabled,
-                    twitch, twitch_enabled, telegram, telegram_enabled,
-                    whatsapp, whatsapp_enabled, spotify, spotify_enabled,
-                    reddit, reddit_enabled, website, website_enabled,
-                    email, email_enabled, phone, phone_enabled
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            
-            $stmt = $db->prepare($sql);
-            $stmt->execute([
-                $user_id, $username, $display_name, $bio_text, $theme_color, $profile_image,
-                $social_data['facebook'], $social_data['facebook_enabled'],
-                $social_data['instagram'], $social_data['instagram_enabled'],
-                $social_data['twitter'], $social_data['twitter_enabled'],
-                $social_data['linkedin'], $social_data['linkedin_enabled'],
-                $social_data['youtube'], $social_data['youtube_enabled'],
-                $social_data['tiktok'], $social_data['tiktok_enabled'],
-                $social_data['github'], $social_data['github_enabled'],
-                $social_data['pinterest'], $social_data['pinterest_enabled'],
-                $social_data['snapchat'], $social_data['snapchat_enabled'],
-                $social_data['discord'], $social_data['discord_enabled'],
-                $social_data['twitch'], $social_data['twitch_enabled'],
-                $social_data['telegram'], $social_data['telegram_enabled'],
-                $social_data['whatsapp'], $social_data['whatsapp_enabled'],
-                $social_data['spotify'], $social_data['spotify_enabled'],
-                $social_data['reddit'], $social_data['reddit_enabled'],
-                $social_data['website'], $social_data['website_enabled'],
-                $social_data['email'], $social_data['email_enabled'],
-                $social_data['phone'], $social_data['phone_enabled']
-            ]);
-        }
-        
-        $success = 'Bio link updated successfully!';
-        
-        // Refresh bio data
-        $stmt = $db->prepare("SELECT * FROM bio_links WHERE user_id = ?");
-        $stmt->execute([$user_id]);
-        $bio = $stmt->fetch();
-        
-    } catch (Exception $e) {
-        $error = 'Failed to update bio link: ' . $e->getMessage();
-    }
-}
 
-$settings = getSettings($db);
+    $settings = getSettings($db);
+    if (!$settings) {
+        $settings = [];
+    }
+} catch (Exception $e) {
+    error_log("Biolink Page Error: " . $e->getMessage());
+    die("An error occurred. Please try again later.");
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -217,6 +256,14 @@ $settings = getSettings($db);
             background: #fee2e2;
             color: #991b1b;
         }
+        .info-box {
+            background: #eff6ff;
+            border: 2px solid #bfdbfe;
+            color: #1e40af;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
         .form-group {
             margin-bottom: 20px;
         }
@@ -232,6 +279,7 @@ $settings = getSettings($db);
         .form-group input[type="tel"],
         .form-group input[type="url"],
         .form-group input[type="color"],
+        .form-group input[type="file"],
         .form-group textarea {
             width: 100%;
             padding: 12px 16px;
@@ -263,6 +311,7 @@ $settings = getSettings($db);
         .toggle-group label {
             margin: 0;
             cursor: pointer;
+            font-weight: 400;
         }
         .social-section {
             border: 2px solid #f1f5f9;
@@ -315,6 +364,12 @@ $settings = getSettings($db);
             .form-row {
                 grid-template-columns: 1fr;
             }
+            .container {
+                padding: 0 10px;
+            }
+            .card {
+                padding: 20px;
+            }
         }
     </style>
 </head>
@@ -340,21 +395,21 @@ $settings = getSettings($db);
                 <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
             
+            <div class="info-box">
+                <strong>ℹ️ Your bio link URL:</strong><br>
+                <?= SITE_URL ?>/bio/<strong><?= htmlspecialchars($current_user['username']) ?></strong>
+            </div>
+            
             <?php if ($bio): ?>
-                <a href="<?= SITE_URL ?>/bio/<?= htmlspecialchars($bio['username']) ?>" target="_blank" class="preview-link">
+                <a href="<?= SITE_URL ?>/bio/<?= htmlspecialchars($current_user['username']) ?>" target="_blank" class="preview-link">
                     👁️ Preview Bio Link
                 </a>
             <?php endif; ?>
             
             <form method="POST" enctype="multipart/form-data" style="margin-top: 24px;">
                 <div class="form-group">
-                    <label>Username *</label>
-                    <input type="text" name="username" value="<?= htmlspecialchars($bio['username'] ?? '') ?>" required pattern="[a-zA-Z0-9_-]+" title="Only letters, numbers, underscore and hyphen allowed">
-                </div>
-                
-                <div class="form-group">
                     <label>Display Name</label>
-                    <input type="text" name="display_name" value="<?= htmlspecialchars($bio['display_name'] ?? '') ?>">
+                    <input type="text" name="display_name" value="<?= htmlspecialchars($bio['display_name'] ?? $current_user['username']) ?>" placeholder="Your name">
                 </div>
                 
                 <div class="form-group">
@@ -366,6 +421,9 @@ $settings = getSettings($db);
                     <div class="form-group">
                         <label>Profile Image</label>
                         <input type="file" name="profile_image" accept="image/*">
+                        <?php if (!empty($bio['profile_image'])): ?>
+                            <small style="color: #64748b;">Current: <?= basename($bio['profile_image']) ?></small>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="form-group">
@@ -378,21 +436,21 @@ $settings = getSettings($db);
                 
                 <?php
                 $social_platforms = [
-                    'facebook' => ['icon' => '📘', 'label' => 'Facebook', 'placeholder' => 'https://facebook.com/username'],
+                    'facebook' => ['icon' => '📞', 'label' => 'Facebook', 'placeholder' => 'https://facebook.com/username'],
                     'instagram' => ['icon' => '📷', 'label' => 'Instagram', 'placeholder' => 'https://instagram.com/username'],
                     'twitter' => ['icon' => '🐦', 'label' => 'X (Twitter)', 'placeholder' => 'https://twitter.com/username'],
                     'linkedin' => ['icon' => '💼', 'label' => 'LinkedIn', 'placeholder' => 'https://linkedin.com/in/username'],
-                    'youtube' => ['icon' => '📹', 'label' => 'YouTube', 'placeholder' => 'https://youtube.com/@username'],
+                    'youtube' => ['icon' => '🎥', 'label' => 'YouTube', 'placeholder' => 'https://youtube.com/@username'],
                     'tiktok' => ['icon' => '🎵', 'label' => 'TikTok', 'placeholder' => 'https://tiktok.com/@username'],
                     'github' => ['icon' => '💻', 'label' => 'GitHub', 'placeholder' => 'https://github.com/username'],
                     'pinterest' => ['icon' => '📌', 'label' => 'Pinterest', 'placeholder' => 'https://pinterest.com/username'],
                     'snapchat' => ['icon' => '👻', 'label' => 'Snapchat', 'placeholder' => 'https://snapchat.com/add/username'],
                     'discord' => ['icon' => '🎮', 'label' => 'Discord', 'placeholder' => 'username#1234 or Discord server invite'],
-                    'twitch' => ['icon' => '🎬', 'label' => 'Twitch', 'placeholder' => 'https://twitch.tv/username'],
+                    'twitch' => ['icon' => '🎦', 'label' => 'Twitch', 'placeholder' => 'https://twitch.tv/username'],
                     'telegram' => ['icon' => '✈️', 'label' => 'Telegram', 'placeholder' => 'https://t.me/username'],
                     'whatsapp' => ['icon' => '💬', 'label' => 'WhatsApp', 'placeholder' => 'https://wa.me/1234567890'],
-                    'spotify' => ['icon' => '🎧', 'label' => 'Spotify', 'placeholder' => 'https://open.spotify.com/user/username'],
-                    'reddit' => ['icon' => '🔴', 'label' => 'Reddit', 'placeholder' => 'https://reddit.com/u/username'],
+                    'spotify' => ['icon' => '🎶', 'label' => 'Spotify', 'placeholder' => 'https://open.spotify.com/user/username'],
+                    'reddit' => ['icon' => '🗣️', 'label' => 'Reddit', 'placeholder' => 'https://reddit.com/u/username'],
                     'website' => ['icon' => '🌐', 'label' => 'Website', 'placeholder' => 'https://yourwebsite.com'],
                 ];
                 
