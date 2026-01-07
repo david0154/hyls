@@ -9,7 +9,9 @@ if (isset($_SESSION['user_id'])) {
 }
 
 $error = $_SESSION['error'] ?? '';
+$success = $_SESSION['success'] ?? '';
 unset($_SESSION['error']);
+unset($_SESSION['success']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = $_POST['username'] ?? '';
@@ -59,17 +61,12 @@ $google_oauth_enabled = ($settings['google_oauth_enabled'] ?? 0) && !empty($sett
 
 // Check if HypeChats OAuth is configured
 $hypechats_enabled = false;
-$oauth_url = '#';
+$hypechats_oauth_url = '#';
 
 if (defined('APP_ID') && defined('APP_SECRET') && !empty(APP_ID) && !empty(APP_SECRET) && APP_ID !== 'your_app_id_here') {
     $hypechats_enabled = true;
-    $oauth_params = [
-        'client_id' => APP_ID,
-        'redirect_uri' => SITE_URL . '/auth.php',
-        'response_type' => 'code',
-        'scope' => 'profile email'
-    ];
-    $oauth_url = 'https://hypechats.com/oauth/authorize?' . http_build_query($oauth_params);
+    // HypeChats OAuth URL format: https://hypechats.com/oauth?app_id={YOUR_APP_ID}
+    $hypechats_oauth_url = 'https://hypechats.com/oauth?app_id=' . urlencode(APP_ID);
 }
 ?>
 <!DOCTYPE html>
@@ -203,6 +200,14 @@ if (defined('APP_ID') && defined('APP_SECRET') && !empty(APP_ID) && !empty(APP_S
             margin-bottom: 20px;
             font-size: 14px;
         }
+        .success {
+            background: #d1fae5;
+            color: #065f46;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
         .divider {
             text-align: center;
             margin: 20px 0;
@@ -247,6 +252,10 @@ if (defined('APP_ID') && defined('APP_SECRET') && !empty(APP_ID) && !empty(APP_S
         <div class="error"><i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
 
+        <?php if ($success): ?>
+        <div class="success"><i class="fas fa-check-circle"></i> <?= htmlspecialchars($success) ?></div>
+        <?php endif; ?>
+
         <?php if ($google_oauth_enabled || $hypechats_enabled): ?>
             <?php if ($google_oauth_enabled): ?>
             <a href="google-auth.php" class="oauth-btn google">
@@ -261,7 +270,7 @@ if (defined('APP_ID') && defined('APP_SECRET') && !empty(APP_ID) && !empty(APP_S
             <?php endif; ?>
 
             <?php if ($hypechats_enabled): ?>
-            <a href="<?= htmlspecialchars($oauth_url) ?>" class="oauth-btn hypechats">
+            <a href="<?= htmlspecialchars($hypechats_oauth_url) ?>" class="oauth-btn hypechats">
                 <i class="fas fa-comments"></i> Continue with HypeChats
             </a>
             <?php endif; ?>
