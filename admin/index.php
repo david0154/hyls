@@ -3,8 +3,8 @@ session_start();
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 
-// Check admin access
-if (!isset($_SESSION['user_id']) || !$_SESSION['is_admin']) {
+// Check admin access - properly check if is_admin exists and is truthy
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_admin']) || !$_SESSION['is_admin']) {
     header('Location: ../login.php');
     exit;
 }
