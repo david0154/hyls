@@ -52,12 +52,10 @@ hyls/
 │   └── profiles/               # Profile pictures
 │
 └── assets/
-    ├── css/
-    │   └── style.css
-    ├── js/
-    │   └── script.js
-    └── images/
-        └── logo.png
+    ├── logo.png
+    │  
+    ├── favicon.ico
+        
 ```
 
 ---
