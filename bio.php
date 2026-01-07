@@ -1,7 +1,7 @@
 <?php
 // bio.php - Bio link display page
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 1);
 ini_set('log_errors', 1);
 
 require_once 'config.php';
@@ -24,29 +24,51 @@ function adjustColor($hex, $steps) {
     return '#' . str_pad(dechex($r), 2, '0', STR_PAD_LEFT) . str_pad(dechex($g), 2, '0', STR_PAD_LEFT) . str_pad(dechex($b), 2, '0', STR_PAD_LEFT);
 }
 
+$bio = null;
+$ad = null;
+$settings = [];
+
 try {
+    // Check if Database class exists
+    if (!class_exists('Database')) {
+        throw new Exception('Database class not found');
+    }
+    
     $db = new Database();
     
     // Get username from URL parameter
     $username = $_GET['u'] ?? '';
+    $username = trim($username);
 
     if (empty($username)) {
         header('Location: index.php');
         exit;
     }
 
-    // Get bio link data
-    $stmt = $db->prepare("SELECT b.*, u.username FROM bio_links b JOIN users u ON b.user_id = u.id WHERE u.username = ?");
+    // Get bio link data - use PDO::FETCH_ASSOC to get only associative keys
+    $stmt = $db->prepare("SELECT b.*, u.username as user_username FROM bio_links b JOIN users u ON b.user_id = u.id WHERE u.username = ?");
+    if (!$stmt) {
+        throw new Exception('Failed to prepare statement');
+    }
+    
     $stmt->execute([$username]);
-    $bio = $stmt->fetch();
+    $bio = $stmt->fetch(\PDO::FETCH_ASSOC);
 
     if (!$bio) {
+        // Bio not found, redirect to home
         header('Location: index.php');
         exit;
     }
 
-    // Update views
-    $db->prepare("UPDATE bio_links SET views = views + 1 WHERE id = ?")->execute([$bio['id']]);
+    // Update views counter
+    try {
+        $update_stmt = $db->prepare("UPDATE bio_links SET views = views + 1 WHERE id = ?");
+        if ($update_stmt) {
+            $update_stmt->execute([$bio['id']]);
+        }
+    } catch (Exception $e) {
+        error_log("Failed to update views: " . $e->getMessage());
+    }
 
     // Get settings
     $settings = getSettings($db);
@@ -55,17 +77,26 @@ try {
     }
 
     // Get active advertisements
-    $stmt = $db->prepare("SELECT * FROM advertisements WHERE is_active = 1 ORDER BY position ASC LIMIT 1");
-    $stmt->execute();
-    $ad = $stmt->fetch();
+    $ad_stmt = $db->prepare("SELECT * FROM advertisements WHERE is_active = 1 ORDER BY position ASC LIMIT 1");
+    if ($ad_stmt) {
+        $ad_stmt->execute();
+        $ad = $ad_stmt->fetch(\PDO::FETCH_ASSOC);
+    }
     
     // Set default theme color if not set
     if (empty($bio['theme_color'])) {
         $bio['theme_color'] = '#6366f1';
     }
+    
 } catch (Exception $e) {
     error_log("Bio Page Error: " . $e->getMessage());
-    die("An error occurred. Please try again later.");
+    die('<div style="padding: 40px; text-align: center; font-family: sans-serif;"><h1>Error Loading Bio</h1><p>' . htmlspecialchars($e->getMessage()) . '</p></div>');
+}
+
+// If we got here without a bio, something is wrong
+if (!$bio) {
+    header('Location: index.php');
+    exit;
 }
 ?>
 <!DOCTYPE html>
@@ -73,17 +104,17 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($bio['display_name'] ?? $bio['username']) ?> - <?= SITE_NAME ?></title>
-    <meta name="description" content="<?= htmlspecialchars($bio['bio'] ?? '') ?>">
-    <meta name="keywords" content="<?= SITE_KEYWORDS ?>">
-    <link rel="icon" type="image/x-icon" href="<?= SITE_URL ?>/assets/favicon.ico">
+    <title><?= htmlspecialchars($bio['display_name'] ?? $bio['username']) ?> - <?= htmlspecialchars(SITE_NAME) ?></title>
+    <meta name="description" content="<?= htmlspecialchars(substr($bio['bio'] ?? '', 0, 160)) ?>">
+    <meta name="keywords" content="<?= htmlspecialchars(SITE_KEYWORDS ?? '') ?>">
+    <link rel="icon" type="image/x-icon" href="<?= htmlspecialchars(SITE_URL) ?>/assets/favicon.ico">
     <?php if (!empty($settings['ga_tracking_id'])): ?>
-    <script async src="https://www.googletagmanager.com/gtag/js?id=<?= $settings['ga_tracking_id'] ?>"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=<?= htmlspecialchars($settings['ga_tracking_id']) ?>"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
-        gtag('config', '<?= $settings['ga_tracking_id'] ?>');
+        gtag('config', '<?= htmlspecialchars($settings['ga_tracking_id']) ?>');
     </script>
     <?php endif; ?>
     <style>
@@ -270,14 +301,14 @@ try {
 
         <div class="profile-card">
             <?php if (!empty($bio['profile_image'])): ?>
-            <img src="<?= SITE_URL ?>/<?= htmlspecialchars($bio['profile_image']) ?>" alt="Profile" class="profile-image">
+            <img src="<?= htmlspecialchars(SITE_URL) ?>/<?= htmlspecialchars($bio['profile_image']) ?>" alt="Profile" class="profile-image">
             <?php else: ?>
             <img src="https://ui-avatars.com/api/?name=<?= urlencode($bio['display_name'] ?? $bio['username']) ?>&size=120&background=6366f1&color=fff" alt="Profile" class="profile-image">
             <?php endif; ?>
             
             <h1 class="display-name"><?= htmlspecialchars($bio['display_name'] ?? $bio['username']) ?></h1>
             <p class="username">@<?= htmlspecialchars($bio['username']) ?></p>
-            <div class="views">👁️ <?= number_format($bio['views']) ?> views</div>
+            <div class="views">👁️ <?= number_format($bio['views'] ?? 0) ?> views</div>
             
             <?php if (!empty($bio['bio'])): ?>
             <p class="bio-text"><?= nl2br(htmlspecialchars($bio['bio'])) ?></p>
@@ -305,10 +336,12 @@ try {
                 ];
                 
                 foreach ($socials as $platform => $icon) {
-                    $enabled = $bio[$platform . '_enabled'] ?? 1;
-                    if (!empty($bio[$platform]) && $enabled) {
-                        $url = $bio[$platform];
-                        // Add protocol if missing
+                    $enabled_key = $platform . '_enabled';
+                    $enabled = $bio[$enabled_key] ?? 1;
+                    $url = $bio[$platform] ?? '';
+                    
+                    if (!empty($url) && $enabled) {
+                        // Add protocol if missing for website
                         if ($platform === 'website' && !preg_match('/^https?:\/\//i', $url)) {
                             $url = 'https://' . $url;
                         }
@@ -318,15 +351,19 @@ try {
                 ?>
             </div>
             
-            <?php if ((!empty($bio['email']) && ($bio['email_enabled'] ?? 1)) || (!empty($bio['phone']) && ($bio['phone_enabled'] ?? 1))): ?>
+            <?php 
+            $has_email = !empty($bio['email']) && ($bio['email_enabled'] ?? 1);
+            $has_phone = !empty($bio['phone']) && ($bio['phone_enabled'] ?? 1);
+            if ($has_email || $has_phone): 
+            ?>
             <div class="contact-links">
-                <?php if (!empty($bio['email']) && ($bio['email_enabled'] ?? 1)): ?>
+                <?php if ($has_email): ?>
                 <a href="mailto:<?= htmlspecialchars($bio['email']) ?>" class="contact-btn">
                     📧 Email Me
                 </a>
                 <?php endif; ?>
                 
-                <?php if (!empty($bio['phone']) && ($bio['phone_enabled'] ?? 1)): ?>
+                <?php if ($has_phone): ?>
                 <a href="tel:<?= htmlspecialchars($bio['phone']) ?>" class="contact-btn">
                     📱 Call Me
                 </a>
@@ -336,8 +373,8 @@ try {
         </div>
         
         <div class="powered-by">
-            <a href="<?= SITE_URL ?>" target="_blank" rel="noopener">
-                🔗 Powered by <?= SITE_NAME ?>
+            <a href="<?= htmlspecialchars(SITE_URL) ?>" target="_blank" rel="noopener">
+                🔗 Powered by <?= htmlspecialchars(SITE_NAME) ?>
             </a>
         </div>
     </div>
