@@ -115,6 +115,15 @@ $recent_users = $db->query("SELECT * FROM users ORDER BY created_at DESC LIMIT 5
             color: var(--primary);
         }
 
+        .navbar-menu a.user-dashboard {
+            color: white;
+            background: #10b981;
+        }
+
+        .navbar-menu a.user-dashboard:hover {
+            background: #059669;
+        }
+
         .navbar-menu a.logout {
             color: white;
             background: var(--danger);
@@ -429,6 +438,7 @@ $recent_users = $db->query("SELECT * FROM users ORDER BY created_at DESC LIMIT 5
                 <a href="users.php"><i class="fas fa-users"></i> Users</a>
                 <a href="links.php"><i class="fas fa-link"></i> Links</a>
                 <a href="settings.php"><i class="fas fa-cog"></i> Settings</a>
+                <a href="../dashboard.php" class="user-dashboard"><i class="fas fa-user"></i> My Dashboard</a>
                 <a href="../logout.php" class="logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
             </div>
         </div>
