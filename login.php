@@ -140,7 +140,6 @@ if (defined('APP_ID') && defined('APP_SECRET') && !empty(APP_ID) && !empty(APP_S
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            margin-bottom: 16px;
             transition: transform 0.2s;
         }
         .btn-login:hover {
@@ -225,20 +224,6 @@ if (defined('APP_ID') && defined('APP_SECRET') && !empty(APP_ID) && !empty(APP_S
         }
         .divider::before { left: 0; }
         .divider::after { right: 0; }
-        .signup-link {
-            text-align: center;
-            margin-top: 20px;
-            color: #64748b;
-            font-size: 14px;
-        }
-        .signup-link a {
-            color: #6366f1;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .signup-link a:hover {
-            text-decoration: underline;
-        }
     </style>
 </head>
 <body>
@@ -291,10 +276,6 @@ if (defined('APP_ID') && defined('APP_SECRET') && !empty(APP_ID) && !empty(APP_S
 
             <button type="submit" class="btn-login"><i class="fas fa-sign-in-alt"></i> Sign In</button>
         </form>
-
-        <div class="signup-link">
-            Don't have an account? <a href="signup.php">Sign Up</a>
-        </div>
     </div>
 </body>
 </html>
