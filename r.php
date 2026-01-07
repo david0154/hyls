@@ -1,67 +1,103 @@
 <?php
 // r.php - URL redirect handler with ads and earnings
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
 require_once 'config.php';
 require_once 'includes/db.php';
 require_once 'includes/functions.php';
 
-$code = $_GET['c'] ?? '';
+try {
+    $code = $_GET['c'] ?? '';
+    $code = trim($code);
 
-if (empty($code)) {
-    header('Location: index.php');
-    exit;
-}
+    if (empty($code)) {
+        header('Location: index.php');
+        exit;
+    }
 
-$db = new Database();
-$stmt = $db->prepare("SELECT * FROM short_links WHERE short_code = ?");
-$stmt->execute([$code]);
-$link = $stmt->fetch();
+    $db = new Database();
+    $stmt = $db->prepare("SELECT * FROM short_links WHERE short_code = ?");
+    if (!$stmt) {
+        throw new Exception('Database error');
+    }
+    
+    $stmt->execute([$code]);
+    $link = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-if (!$link) {
-    header('Location: index.php');
-    exit;
-}
+    if (!$link) {
+        header('Location: index.php');
+        exit;
+    }
 
-// Track analytics
-$ip = $_SERVER['REMOTE_ADDR'];
-$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
-$referrer = $_SERVER['HTTP_REFERER'] ?? '';
+    // Track analytics
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    $referrer = $_SERVER['HTTP_REFERER'] ?? '';
 
-$stmt = $db->prepare("INSERT INTO analytics (link_id, ip_address, user_agent, referrer) VALUES (?, ?, ?, ?)");
-$stmt->execute([$link['id'], $ip, $user_agent, $referrer]);
+    try {
+        $analytics_stmt = $db->prepare("INSERT INTO analytics (link_id, ip_address, user_agent, referrer) VALUES (?, ?, ?, ?)");
+        if ($analytics_stmt) {
+            $analytics_stmt->execute([$link['id'], $ip, $user_agent, $referrer]);
+        }
+    } catch (Exception $e) {
+        error_log("Analytics insert error: " . $e->getMessage());
+    }
 
-// Update clicks
-$db->prepare("UPDATE short_links SET clicks = clicks + 1 WHERE id = ?")->execute([$link['id']]);
+    // Update clicks
+    try {
+        $db->prepare("UPDATE short_links SET clicks = clicks + 1 WHERE id = ?")->execute([$link['id']]);
+    } catch (Exception $e) {
+        error_log("Click update error: " . $e->getMessage());
+    }
 
-// Calculate and add earnings
-$settings = getSettings($db);
-$earning_per_click = floatval($settings['earning_per_click'] ?? 0.001);
-$db->prepare("UPDATE short_links SET earnings = earnings + ? WHERE id = ?")->execute([$earning_per_click, $link['id']]);
-$db->prepare("UPDATE users SET earnings = earnings + ? WHERE id = ?")->execute([$earning_per_click, $link['user_id']]);
+    // Calculate and add earnings
+    $settings = getSettings($db);
+    if ($settings) {
+        $earning_per_click = floatval($settings['earning_per_click'] ?? 0.001);
+        try {
+            $db->prepare("UPDATE short_links SET earnings = earnings + ? WHERE id = ?")->execute([$earning_per_click, $link['id']]);
+            $db->prepare("UPDATE users SET earnings = earnings + ? WHERE id = ?")->execute([$earning_per_click, $link['user_id']]);
+        } catch (Exception $e) {
+            error_log("Earnings update error: " . $e->getMessage());
+        }
+    }
 
-$ads_enabled = $settings['ads_enabled'] ?? 1;
-$ads_duration = intval($settings['ads_duration'] ?? 5);
+    $ads_enabled = $settings['ads_enabled'] ?? 1;
+    $ads_duration = intval($settings['ads_duration'] ?? 5);
 
-// Get active advertisement
-$stmt = $db->prepare("SELECT * FROM advertisements WHERE is_active = 1 ORDER BY position ASC LIMIT 1");
-$stmt->execute();
-$ad = $stmt->fetch();
+    // Get active advertisement
+    $ad = null;
+    try {
+        $ad_stmt = $db->prepare("SELECT * FROM advertisements WHERE is_active = 1 ORDER BY position ASC LIMIT 1");
+        if ($ad_stmt) {
+            $ad_stmt->execute();
+            $ad = $ad_stmt->fetch(\PDO::FETCH_ASSOC);
+        }
+    } catch (Exception $e) {
+        error_log("Ad fetch error: " . $e->getMessage());
+    }
 
-if ($ads_enabled && $ad):
+    // If ads enabled and ad found, show ad page
+    if ($ads_enabled && $ad):
+        $original_url = htmlspecialchars($link['original_url']);
+        $js_url = htmlspecialchars(addslashes($link['original_url']));
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Redirecting... - <?= SITE_NAME ?></title>
-    <link rel="icon" type="image/x-icon" href="<?= SITE_URL ?>/assets/favicon.ico">
+    <title>Redirecting... - <?= htmlspecialchars(SITE_NAME) ?></title>
+    <link rel="icon" type="image/x-icon" href="<?= htmlspecialchars(SITE_URL) ?>/assets/favicon.ico">
     <?php if (!empty($settings['ga_tracking_id'])): ?>
-    <script async src="https://www.googletagmanager.com/gtag/js?id=<?= $settings['ga_tracking_id'] ?>"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=<?= htmlspecialchars($settings['ga_tracking_id']) ?>"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
-        gtag('config', '<?= $settings['ga_tracking_id'] ?>');
+        gtag('config', '<?= htmlspecialchars($settings['ga_tracking_id']) ?>');
     </script>
     <?php endif; ?>
     <style>
@@ -163,6 +199,7 @@ if ($ads_enabled && $ad):
             font-weight: 600;
             margin-top: 16px;
             transition: all 0.3s;
+            cursor: pointer;
         }
         .skip-btn:hover {
             background: rgba(255, 255, 255, 0.3);
@@ -172,13 +209,13 @@ if ($ads_enabled && $ad):
 <body>
     <div class="container">
         <div class="ad-box">
-            <?php if ($ad['image_url']): ?>
+            <?php if (!empty($ad['image_url'])): ?>
             <img src="<?= htmlspecialchars($ad['image_url']) ?>" alt="<?= htmlspecialchars($ad['title']) ?>" class="ad-image">
             <?php else: ?>
             <div class="ad-logo">💬</div>
             <?php endif; ?>
             <h2 class="ad-title"><?= htmlspecialchars($ad['title']) ?></h2>
-            <?php if ($ad['description']): ?>
+            <?php if (!empty($ad['description'])): ?>
             <p class="ad-description"><?= nl2br(htmlspecialchars($ad['description'])) ?></p>
             <?php endif; ?>
             <a href="<?= htmlspecialchars($ad['url']) ?>" target="_blank" rel="noopener" class="btn-visit">
@@ -193,19 +230,23 @@ if ($ads_enabled && $ad):
             <div class="progress-bar">
                 <div class="progress-fill" id="progress"></div>
             </div>
-            <a href="<?= htmlspecialchars($link['original_url']) ?>" class="skip-btn" id="skipBtn" style="display:none;">
+            <button class="skip-btn" id="skipBtn" style="display:none;" onclick="skipAd(); return false;">
                 Skip Ad →
-            </a>
+            </button>
         </div>
     </div>
 
     <script>
+        const targetUrl = "<?= $js_url ?>";
         let timeLeft = <?= $ads_duration ?>;
         const countdown = document.getElementById('countdown');
         const progress = document.getElementById('progress');
         const skipBtn = document.getElementById('skipBtn');
         const totalTime = <?= $ads_duration ?>;
-        const targetUrl = <?= json_encode($link['original_url']) ?>;
+        
+        function skipAd() {
+            window.location.href = targetUrl;
+        }
         
         const timer = setInterval(() => {
             timeLeft--;
@@ -227,7 +268,14 @@ if ($ads_enabled && $ad):
 </body>
 </html>
 <?php else:
+    // No ads, redirect immediately
     header('Location: ' . $link['original_url']);
     exit;
 endif;
+
+} catch (Exception $e) {
+    error_log("R.php Error: " . $e->getMessage());
+    header('Location: index.php');
+    exit;
+}
 ?>
