@@ -1,0 +1,20 @@
+// ===========================
+// FILE: .htaccess
+// ===========================
+
+RewriteEngine On
+RewriteBase /
+
+# Redirect to install if config doesn't exist
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !^/install\.php
+RewriteRule ^(.*)$ install.php [L]
+
+# Bio link routing
+RewriteRule ^bio/([a-zA-Z0-9_-]+)$ bio.php?u=$1 [L,QSA]
+
+# Short link routing
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^([a-zA-Z0-9_-]+)$ r.php?c=$1 [L,QSA]
