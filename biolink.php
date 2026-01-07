@@ -92,7 +92,7 @@ try {
                 if ($bio) {
                     // Update existing bio
                     $sql = "UPDATE bio_links SET 
-                            display_name = ?, bio = ?, theme_color = ?, profile_image = ?,
+                            username = ?, display_name = ?, bio = ?, theme_color = ?, profile_image = ?,
                             facebook = ?, facebook_enabled = ?, instagram = ?, instagram_enabled = ?,
                             twitter = ?, twitter_enabled = ?, linkedin = ?, linkedin_enabled = ?,
                             youtube = ?, youtube_enabled = ?, tiktok = ?, tiktok_enabled = ?,
@@ -101,13 +101,12 @@ try {
                             twitch = ?, twitch_enabled = ?, telegram = ?, telegram_enabled = ?,
                             whatsapp = ?, whatsapp_enabled = ?, spotify = ?, spotify_enabled = ?,
                             reddit = ?, reddit_enabled = ?, website = ?, website_enabled = ?,
-                            email = ?, email_enabled = ?, phone = ?, phone_enabled = ?,
-                            updated_at = NOW()
+                            email = ?, email_enabled = ?, phone = ?, phone_enabled = ?
                             WHERE user_id = ?";
                     
                     $stmt = $db->prepare($sql);
                     $stmt->execute([
-                        $display_name, $bio_text, $theme_color, $profile_image,
+                        $username, $display_name, $bio_text, $theme_color, $profile_image,
                         $social_data['facebook'], $social_data['facebook_enabled'],
                         $social_data['instagram'], $social_data['instagram_enabled'],
                         $social_data['twitter'], $social_data['twitter_enabled'],
@@ -129,9 +128,9 @@ try {
                         $user_id
                     ]);
                 } else {
-                    // Create new bio
+                    // Create new bio - MUST include username field
                     $sql = "INSERT INTO bio_links (
-                            user_id, display_name, bio, theme_color, profile_image,
+                            user_id, username, display_name, bio, theme_color, profile_image,
                             facebook, facebook_enabled, instagram, instagram_enabled,
                             twitter, twitter_enabled, linkedin, linkedin_enabled,
                             youtube, youtube_enabled, tiktok, tiktok_enabled,
@@ -140,13 +139,12 @@ try {
                             twitch, twitch_enabled, telegram, telegram_enabled,
                             whatsapp, whatsapp_enabled, spotify, spotify_enabled,
                             reddit, reddit_enabled, website, website_enabled,
-                            email, email_enabled, phone, phone_enabled,
-                            created_at, updated_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+                            email, email_enabled, phone, phone_enabled
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                     
                     $stmt = $db->prepare($sql);
                     $stmt->execute([
-                        $user_id, $display_name, $bio_text, $theme_color, $profile_image,
+                        $user_id, $username, $display_name, $bio_text, $theme_color, $profile_image,
                         $social_data['facebook'], $social_data['facebook_enabled'],
                         $social_data['instagram'], $social_data['instagram_enabled'],
                         $social_data['twitter'], $social_data['twitter_enabled'],
@@ -345,15 +343,15 @@ try {
         .preview-link {
             display: inline-block;
             padding: 10px 20px;
-            background: #f1f5f9;
-            color: #6366f1;
+            background: #10b981;
+            color: white;
             text-decoration: none;
             border-radius: 8px;
             font-weight: 600;
             margin-top: 12px;
         }
         .preview-link:hover {
-            background: #e2e8f0;
+            background: #059669;
         }
         .form-row {
             display: grid;
@@ -396,13 +394,15 @@ try {
             <?php endif; ?>
             
             <div class="info-box">
-                <strong>ℹ️ Your bio link URL:</strong><br>
-                <?= SITE_URL ?>/bio/<strong><?= htmlspecialchars($current_user['username']) ?></strong>
+                <strong>✅ Your bio link URL:</strong><br>
+                <a href="<?= SITE_URL ?>/bio/<?= htmlspecialchars($current_user['username']) ?>" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 700;">
+                    <?= SITE_URL ?>/bio/<strong><?= htmlspecialchars($current_user['username']) ?></strong>
+                </a>
             </div>
             
             <?php if ($bio): ?>
                 <a href="<?= SITE_URL ?>/bio/<?= htmlspecialchars($current_user['username']) ?>" target="_blank" class="preview-link">
-                    👁️ Preview Bio Link
+                    👁️ View Your Bio Link
                 </a>
             <?php endif; ?>
             
@@ -443,14 +443,6 @@ try {
                     'youtube' => ['icon' => '🎥', 'label' => 'YouTube', 'placeholder' => 'https://youtube.com/@username'],
                     'tiktok' => ['icon' => '🎵', 'label' => 'TikTok', 'placeholder' => 'https://tiktok.com/@username'],
                     'github' => ['icon' => '💻', 'label' => 'GitHub', 'placeholder' => 'https://github.com/username'],
-                    'pinterest' => ['icon' => '📌', 'label' => 'Pinterest', 'placeholder' => 'https://pinterest.com/username'],
-                    'snapchat' => ['icon' => '👻', 'label' => 'Snapchat', 'placeholder' => 'https://snapchat.com/add/username'],
-                    'discord' => ['icon' => '🎮', 'label' => 'Discord', 'placeholder' => 'username#1234 or Discord server invite'],
-                    'twitch' => ['icon' => '🎦', 'label' => 'Twitch', 'placeholder' => 'https://twitch.tv/username'],
-                    'telegram' => ['icon' => '✈️', 'label' => 'Telegram', 'placeholder' => 'https://t.me/username'],
-                    'whatsapp' => ['icon' => '💬', 'label' => 'WhatsApp', 'placeholder' => 'https://wa.me/1234567890'],
-                    'spotify' => ['icon' => '🎶', 'label' => 'Spotify', 'placeholder' => 'https://open.spotify.com/user/username'],
-                    'reddit' => ['icon' => '🗣️', 'label' => 'Reddit', 'placeholder' => 'https://reddit.com/u/username'],
                     'website' => ['icon' => '🌐', 'label' => 'Website', 'placeholder' => 'https://yourwebsite.com'],
                 ];
                 
