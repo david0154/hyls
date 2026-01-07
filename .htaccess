@@ -1,20 +1,32 @@
-// ===========================
-// FILE: .htaccess
-// ===========================
-
 RewriteEngine On
 RewriteBase /
 
-# Redirect to install if config doesn't exist
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_URI} !^/install\.php
-RewriteRule ^(.*)$ install.php [L]
+# Prevent access to sensitive files
+<Files "config.php">
+    Order allow,deny
+    Deny from all
+</Files>
 
-# Bio link routing
+# Force HTTPS (recommended)
+# RewriteCond %{HTTPS} off
+# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Redirect to install if config doesn't exist
+RewriteCond %{REQUEST_URI} !^/install\.php$
+RewriteCond %{REQUEST_URI} !^/assets/
+RewriteCond %{REQUEST_URI} !^/uploads/
+RewriteCond %{DOCUMENT_ROOT}/config.php !-f
+RewriteRule ^(.*)$ /install.php [L]
+
+# Bio link routing - must come before short link routing
 RewriteRule ^bio/([a-zA-Z0-9_-]+)$ bio.php?u=$1 [L,QSA]
 
-# Short link routing
+# Admin routing
+RewriteRule ^admin/?$ admin/index.php [L]
+
+# Short link routing - last priority
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !^/(login|dashboard|biolink|shorten|delete_link|logout|auth|index)\.php$
+RewriteCond %{REQUEST_URI} !^/(admin|assets|uploads|includes)/
 RewriteRule ^([a-zA-Z0-9_-]+)$ r.php?c=$1 [L,QSA]
