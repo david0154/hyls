@@ -1,5 +1,5 @@
 <?php
-// bio.php - Bio link display page
+// bio.php - Bio link display page with enhanced design
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 ini_set('log_errors', 1);
@@ -13,14 +13,12 @@ $ad = null;
 $settings = [];
 
 try {
-    // Check if Database class exists
     if (!class_exists('Database')) {
         throw new Exception('Database class not found');
     }
     
     $db = new Database();
     
-    // Get username from URL parameter
     $username = $_GET['u'] ?? '';
     $username = trim($username);
 
@@ -29,7 +27,6 @@ try {
         exit;
     }
 
-    // Get bio link data - use PDO::FETCH_ASSOC to get only associative keys
     $stmt = $db->prepare("SELECT b.*, u.username as user_username FROM bio_links b JOIN users u ON b.user_id = u.id WHERE u.username = ?");
     if (!$stmt) {
         throw new Exception('Failed to prepare statement');
@@ -39,12 +36,10 @@ try {
     $bio = $stmt->fetch(\PDO::FETCH_ASSOC);
 
     if (!$bio) {
-        // Bio not found, redirect to home
         header('Location: index.php');
         exit;
     }
 
-    // Update views counter
     try {
         $update_stmt = $db->prepare("UPDATE bio_links SET views = views + 1 WHERE id = ?");
         if ($update_stmt) {
@@ -54,20 +49,17 @@ try {
         error_log("Failed to update views: " . $e->getMessage());
     }
 
-    // Get settings
     $settings = getSettings($db);
     if (!$settings) {
         $settings = [];
     }
 
-    // Get active advertisements
     $ad_stmt = $db->prepare("SELECT * FROM advertisements WHERE is_active = 1 ORDER BY position ASC LIMIT 1");
     if ($ad_stmt) {
         $ad_stmt->execute();
         $ad = $ad_stmt->fetch(\PDO::FETCH_ASSOC);
     }
     
-    // Set default theme color if not set
     if (empty($bio['theme_color'])) {
         $bio['theme_color'] = '#6366f1';
     }
@@ -77,13 +69,11 @@ try {
     die('<div style="padding: 40px; text-align: center; font-family: sans-serif;"><h1>Error Loading Bio</h1><p>' . htmlspecialchars($e->getMessage()) . '</p></div>');
 }
 
-// If we got here without a bio, something is wrong
 if (!$bio) {
     header('Location: index.php');
     exit;
 }
 
-// Get the adjusted color for gradient - use adjustColor from functions.php
 $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color'], -20) : $bio['theme_color'];
 ?>
 <!DOCTYPE html>
@@ -94,8 +84,9 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
     <title><?= htmlspecialchars($bio['display_name'] ?? $bio['username']) ?> - <?= htmlspecialchars(SITE_NAME) ?></title>
     <meta name="description" content="<?= htmlspecialchars(substr($bio['bio'] ?? '', 0, 160)) ?>">
     <meta name="keywords" content="<?= htmlspecialchars(SITE_KEYWORDS ?? '') ?>">
+    <meta property="og:title" content="<?= htmlspecialchars($bio['display_name'] ?? $bio['username']) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars(substr($bio['bio'] ?? '', 0, 160)) ?>">
     <link rel="icon" type="image/x-icon" href="<?= htmlspecialchars(SITE_URL) ?>/assets/favicon.ico">
-    <!-- Font Awesome CDN for social media icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <?php if (!empty($settings['ga_tracking_id'])): ?>
     <script async src="https://www.googletagmanager.com/gtag/js?id=<?= htmlspecialchars($settings['ga_tracking_id']) ?>"></script>
@@ -124,7 +115,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             overflow-x: hidden;
         }
         
-        /* Animated background */
         body::before {
             content: '';
             position: fixed;
@@ -158,14 +148,13 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
         }
         
         @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         
         .profile-image-wrapper {
@@ -177,6 +166,7 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             border-radius: 50%;
             padding: 4px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            animation: fadeIn 0.8s ease-out;
         }
         
         .profile-image {
@@ -206,14 +196,23 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             font-weight: 500;
         }
         
-        .views {
-            display: inline-block;
+        .badge-container {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             background: linear-gradient(135deg, rgba(<?= htmlspecialchars($bio['theme_color']) ?>, 0.1), rgba(<?= htmlspecialchars($adjusted_color) ?>, 0.1));
             color: <?= htmlspecialchars($bio['theme_color']) ?>;
             padding: 8px 16px;
             border-radius: 20px;
-            font-size: 14px;
-            margin-bottom: 20px;
+            font-size: 13px;
             font-weight: 600;
             border: 1px solid <?= htmlspecialchars($bio['theme_color']) ?>;
         }
@@ -229,15 +228,28 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             border-left: 4px solid <?= htmlspecialchars($bio['theme_color']) ?>;
         }
         
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0,0,0,0.1), transparent);
+            margin: 25px 0;
+        }
+        
+        .section-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 25px;
+            margin-bottom: 16px;
+        }
+        
         .social-links {
             display: flex;
             gap: 15px;
             justify-content: center;
             flex-wrap: wrap;
-            margin-top: 30px;
-            padding: 25px 0;
-            border-top: 1px solid rgba(0, 0, 0, 0.08);
-            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            animation: fadeIn 0.8s ease-out 0.2s both;
         }
         
         .social-btn {
@@ -254,6 +266,26 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
             border: 2px solid white;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .social-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .social-btn:hover::before {
+            width: 300px;
+            height: 300px;
         }
         
         .social-btn:hover {
@@ -266,7 +298,8 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             display: flex;
             flex-direction: column;
             gap: 12px;
-            margin-top: 25px;
+            margin-top: 16px;
+            animation: fadeIn 0.8s ease-out 0.4s both;
         }
         
         .contact-btn {
@@ -284,6 +317,34 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             font-size: 15px;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
             border: 2px solid white;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .contact-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.2);
+            transition: left 0.3s;
+            z-index: 0;
+        }
+        
+        .contact-btn:hover::before {
+            left: 100%;
+        }
+        
+        .contact-btn span {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            justify-content: center;
         }
         
         .contact-btn:hover {
@@ -306,6 +367,7 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             margin-bottom: 20px;
             border: 1px solid rgba(0, 0, 0, 0.05);
             backdrop-filter: blur(10px);
+            animation: slideUp 0.6s ease-out;
         }
         .ad-banner h3 {
             background: linear-gradient(135deg, #6366f1, #8b5cf6);
@@ -342,6 +404,7 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
         .powered-by {
             text-align: center;
             margin-top: 25px;
+            animation: fadeIn 0.8s ease-out 0.6s both;
         }
         .powered-by a {
             display: inline-flex;
@@ -394,6 +457,13 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
                 font-size: 14px;
                 padding: 15px;
             }
+            .badge-container {
+                gap: 6px;
+            }
+            .badge {
+                font-size: 12px;
+                padding: 6px 12px;
+            }
         }
     </style>
 </head>
@@ -412,7 +482,7 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
         <div class="profile-card">
             <div class="profile-image-wrapper">
                 <?php if (!empty($bio['profile_image'])): ?>
-                <img src="<?= htmlspecialchars(SITE_URL) ?>/<?= htmlspecialchars($bio['profile_image']) ?>" alt="Profile" class="profile-image">
+                <img src="<?= htmlspecialchars(SITE_URL) ?>/<?= htmlspecialchars($bio['profile_image']) ?>" alt="Profile" class="profile-image" loading="lazy">
                 <?php else: ?>
                 <img src="https://ui-avatars.com/api/?name=<?= urlencode($bio['display_name'] ?? $bio['username']) ?>&size=140&background=<?= str_replace('#', '', htmlspecialchars($bio['theme_color'])) ?>&color=fff&bold=true" alt="Profile" class="profile-image">
                 <?php endif; ?>
@@ -420,41 +490,54 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             
             <h1 class="display-name"><?= htmlspecialchars($bio['display_name'] ?? $bio['username']) ?></h1>
             <p class="username">@<?= htmlspecialchars($bio['username']) ?></p>
-            <div class="views"><i class="fas fa-eye"></i> <?= number_format($bio['views'] ?? 0) ?> views</div>
+            
+            <div class="badge-container">
+                <span class="badge"><i class="fas fa-eye"></i> <?= number_format($bio['views'] ?? 0) ?> views</span>
+            </div>
             
             <?php if (!empty($bio['bio'])): ?>
             <p class="bio-text"><?= nl2br(htmlspecialchars($bio['bio'])) ?></p>
             <?php endif; ?>
             
+            <?php
+            $socials = [
+                'facebook' => 'fab fa-facebook-f',
+                'instagram' => 'fab fa-instagram',
+                'twitter' => 'fab fa-x-twitter',
+                'linkedin' => 'fab fa-linkedin-in',
+                'youtube' => 'fab fa-youtube',
+                'tiktok' => 'fab fa-tiktok',
+                'github' => 'fab fa-github',
+                'pinterest' => 'fab fa-pinterest-p',
+                'snapchat' => 'fab fa-snapchat-ghost',
+                'discord' => 'fab fa-discord',
+                'twitch' => 'fab fa-twitch',
+                'telegram' => 'fab fa-telegram',
+                'whatsapp' => 'fab fa-whatsapp',
+                'spotify' => 'fab fa-spotify',
+                'reddit' => 'fab fa-reddit-alien',
+                'website' => 'fas fa-globe'
+            ];
+            
+            $has_socials = false;
+            foreach ($socials as $platform => $icon) {
+                if (!empty($bio[$platform]) && ($bio[$platform . '_enabled'] ?? 1)) {
+                    $has_socials = true;
+                    break;
+                }
+            }
+            
+            if ($has_socials):
+            ?>
+            <div class="divider"></div>
+            <div class="section-title"><i class="fas fa-share-alt"></i> Connect</div>
             <div class="social-links">
                 <?php
-                // Social media icons mapping with Font Awesome classes
-                $socials = [
-                    'facebook' => 'fab fa-facebook-f',
-                    'instagram' => 'fab fa-instagram',
-                    'twitter' => 'fab fa-x-twitter',
-                    'linkedin' => 'fab fa-linkedin-in',
-                    'youtube' => 'fab fa-youtube',
-                    'tiktok' => 'fab fa-tiktok',
-                    'github' => 'fab fa-github',
-                    'pinterest' => 'fab fa-pinterest-p',
-                    'snapchat' => 'fab fa-snapchat-ghost',
-                    'discord' => 'fab fa-discord',
-                    'twitch' => 'fab fa-twitch',
-                    'telegram' => 'fab fa-telegram',
-                    'whatsapp' => 'fab fa-whatsapp',
-                    'spotify' => 'fab fa-spotify',
-                    'reddit' => 'fab fa-reddit-alien',
-                    'website' => 'fas fa-globe'
-                ];
-                
                 foreach ($socials as $platform => $icon) {
-                    $enabled_key = $platform . '_enabled';
-                    $enabled = $bio[$enabled_key] ?? 1;
+                    $enabled = $bio[$platform . '_enabled'] ?? 1;
                     $url = $bio[$platform] ?? '';
                     
                     if (!empty($url) && $enabled) {
-                        // Add protocol if missing for website
                         if ($platform === 'website' && !preg_match('/^https?:\/\//i', $url)) {
                             $url = 'https://' . $url;
                         }
@@ -463,22 +546,25 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
                 }
                 ?>
             </div>
+            <?php endif; ?>
             
             <?php 
             $has_email = !empty($bio['email']) && ($bio['email_enabled'] ?? 1);
             $has_phone = !empty($bio['phone']) && ($bio['phone_enabled'] ?? 1);
             if ($has_email || $has_phone): 
             ?>
+            <div class="divider"></div>
+            <div class="section-title"><i class="fas fa-address-card"></i> Contact</div>
             <div class="contact-links">
                 <?php if ($has_email): ?>
                 <a href="mailto:<?= htmlspecialchars($bio['email']) ?>" class="contact-btn">
-                    <i class="fas fa-envelope"></i> Email Me
+                    <span><i class="fas fa-envelope"></i> Email Me</span>
                 </a>
                 <?php endif; ?>
                 
                 <?php if ($has_phone): ?>
                 <a href="tel:<?= htmlspecialchars($bio['phone']) ?>" class="contact-btn">
-                    <i class="fas fa-phone"></i> Call Me
+                    <span><i class="fas fa-phone"></i> Call Me</span>
                 </a>
                 <?php endif; ?>
             </div>
@@ -491,5 +577,12 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             </a>
         </div>
     </div>
+
+    <script>
+        // Smooth page load animation
+        document.addEventListener('DOMContentLoaded', function() {
+            document.body.style.opacity = '1';
+        });
+    </script>
 </body>
 </html>
