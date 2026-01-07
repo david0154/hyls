@@ -11,6 +11,23 @@ if (!isset($_SESSION['user_id']) || !$_SESSION['is_admin']) {
 
 $db = new Database();
 
+// Check which columns exist in short_links table
+$columns = [];
+try {
+    $stmt = $db->query("SHOW COLUMNS FROM short_links");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $columns[] = $row['Field'];
+    }
+} catch (Exception $e) {
+    $columns = ['id', 'user_id', 'short_code', 'original_url', 'title', 'clicks', 'created_at'];
+}
+
+$has_expires_at = in_array('expires_at', $columns);
+$has_password = in_array('password', $columns);
+$has_is_banned = in_array('is_banned', $columns);
+$has_ban_reason = in_array('ban_reason', $columns);
+$has_banned_at = in_array('banned_at', $columns);
+
 // Handle link actions
 if (isset($_GET['action']) && isset($_GET['link_id'])) {
     $link_id = (int)$_GET['link_id'];
@@ -20,16 +37,32 @@ if (isset($_GET['action']) && isset($_GET['link_id'])) {
         switch ($action) {
             case 'ban':
             case 'block':
-                $stmt = $db->prepare("UPDATE short_links SET is_banned = 1, banned_at = NOW() WHERE id = ?");
-                $stmt->execute([$link_id]);
-                $_SESSION['success'] = 'Link blocked successfully!';
+                if ($has_is_banned) {
+                    if ($has_banned_at) {
+                        $stmt = $db->prepare("UPDATE short_links SET is_banned = 1, banned_at = NOW() WHERE id = ?");
+                    } else {
+                        $stmt = $db->prepare("UPDATE short_links SET is_banned = 1 WHERE id = ?");
+                    }
+                    $stmt->execute([$link_id]);
+                    $_SESSION['success'] = 'Link blocked successfully!';
+                } else {
+                    $_SESSION['error'] = 'Blocking feature not available. Run migration first.';
+                }
                 break;
                 
             case 'unban':
             case 'unblock':
-                $stmt = $db->prepare("UPDATE short_links SET is_banned = 0, ban_reason = NULL, banned_at = NULL WHERE id = ?");
-                $stmt->execute([$link_id]);
-                $_SESSION['success'] = 'Link unblocked successfully!';
+                if ($has_is_banned) {
+                    if ($has_ban_reason && $has_banned_at) {
+                        $stmt = $db->prepare("UPDATE short_links SET is_banned = 0, ban_reason = NULL, banned_at = NULL WHERE id = ?");
+                    } else {
+                        $stmt = $db->prepare("UPDATE short_links SET is_banned = 0 WHERE id = ?");
+                    }
+                    $stmt->execute([$link_id]);
+                    $_SESSION['success'] = 'Link unblocked successfully!';
+                } else {
+                    $_SESSION['error'] = 'Unblocking feature not available. Run migration first.';
+                }
                 break;
                 
             case 'delete':
@@ -67,12 +100,14 @@ if ($search) {
     $params[] = $search_param;
 }
 
-if ($filter === 'blocked') {
-    $where[] = "l.is_banned = 1";
-} elseif ($filter === 'active') {
-    $where[] = "l.is_banned = 0";
-} elseif ($filter === 'expired') {
-    $where[] = "l.expires_at IS NOT NULL AND l.expires_at < NOW()";
+if ($has_is_banned) {
+    if ($filter === 'blocked') {
+        $where[] = "l.is_banned = 1";
+    } elseif ($filter === 'active') {
+        $where[] = "l.is_banned = 0";
+    } elseif ($filter === 'expired' && $has_expires_at) {
+        $where[] = "l.expires_at IS NOT NULL AND l.expires_at < NOW()";
+    }
 }
 
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -100,14 +135,22 @@ try {
     $stmt = $db->query("SELECT COUNT(*) as total FROM short_links");
     $total_links = $stmt->fetch()['total'] ?? 0;
     
-    $stmt = $db->query("SELECT COUNT(*) as total FROM short_links WHERE is_banned = 1");
-    $blocked_links = $stmt->fetch()['total'] ?? 0;
+    if ($has_is_banned) {
+        $stmt = $db->query("SELECT COUNT(*) as total FROM short_links WHERE is_banned = 1");
+        $blocked_links = $stmt->fetch()['total'] ?? 0;
+    } else {
+        $blocked_links = 0;
+    }
     
     $stmt = $db->query("SELECT SUM(clicks) as total FROM short_links");
     $total_clicks = $stmt->fetch()['total'] ?? 0;
     
-    $stmt = $db->query("SELECT COUNT(*) as total FROM short_links WHERE expires_at IS NOT NULL AND expires_at < NOW()");
-    $expired_links = $stmt->fetch()['total'] ?? 0;
+    if ($has_expires_at) {
+        $stmt = $db->query("SELECT COUNT(*) as total FROM short_links WHERE expires_at IS NOT NULL AND expires_at < NOW()");
+        $expired_links = $stmt->fetch()['total'] ?? 0;
+    } else {
+        $expired_links = 0;
+    }
     
 } catch (Exception $e) {
     $_SESSION['error'] = 'Database error: ' . $e->getMessage();
@@ -162,6 +205,7 @@ try {
         .btn-view:hover { background: #2563eb; }
         .success { background: #22c55e; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
         .error { background: #ef4444; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .warning { background: #f59e0b; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
         .pagination { display: flex; gap: 5px; margin-top: 20px; justify-content: center; flex-wrap: wrap; }
         .pagination a { padding: 8px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #e2e8f0; text-decoration: none; }
         .pagination a.active { background: #3b82f6; border-color: #3b82f6; }
@@ -190,6 +234,16 @@ try {
         
         <h1><i class="fas fa-link"></i> Link Management</h1>
         
+        <?php if (!$has_is_banned || !$has_expires_at || !$has_password): ?>
+            <div class="warning">
+                <i class="fas fa-exclamation-triangle"></i> <strong>Missing Features Detected!</strong><br>
+                Some advanced features are not available. <a href="../install.php?mode=repair" style="color: white; text-decoration: underline;">Run Auto-Migration</a> to enable:
+                <?php if (!$has_is_banned): ?><br>• Link Blocking/Banning<?php endif; ?>
+                <?php if (!$has_expires_at): ?><br>• Link Expiration<?php endif; ?>
+                <?php if (!$has_password): ?><br>• Password Protection<?php endif; ?>
+            </div>
+        <?php endif; ?>
+        
         <?php if (isset($_SESSION['success'])): ?>
             <div class="success"><i class="fas fa-check-circle"></i> <?= $_SESSION['success']; unset($_SESSION['success']); ?></div>
         <?php endif; ?>
@@ -208,23 +262,31 @@ try {
                 <h3>Total Clicks</h3>
                 <div class="value"><?= number_format($total_clicks) ?></div>
             </div>
+            <?php if ($has_is_banned): ?>
             <div class="stat-card">
                 <h3>Blocked Links</h3>
                 <div class="value" style="color: #ef4444;"><?= number_format($blocked_links) ?></div>
             </div>
+            <?php endif; ?>
+            <?php if ($has_expires_at): ?>
             <div class="stat-card">
                 <h3>Expired Links</h3>
                 <div class="value" style="color: #f97316;"><?= number_format($expired_links) ?></div>
             </div>
+            <?php endif; ?>
         </div>
         
         <!-- Header -->
         <div class="header">
             <div class="filters">
                 <a href="?filter=all" class="filter-btn <?= $filter === 'all' ? 'active' : '' ?>">All Links (<?= $total_links ?>)</a>
+                <?php if ($has_is_banned): ?>
                 <a href="?filter=active" class="filter-btn <?= $filter === 'active' ? 'active' : '' ?>">Active</a>
                 <a href="?filter=blocked" class="filter-btn <?= $filter === 'blocked' ? 'active' : '' ?>">Blocked (<?= $blocked_links ?>)</a>
+                <?php endif; ?>
+                <?php if ($has_expires_at): ?>
                 <a href="?filter=expired" class="filter-btn <?= $filter === 'expired' ? 'active' : '' ?>">Expired (<?= $expired_links ?>)</a>
+                <?php endif; ?>
             </div>
             
             <form class="search-box" method="GET">
@@ -268,7 +330,7 @@ try {
                                 <strong><a href="<?= SITE_URL ?>/<?= htmlspecialchars($link['short_code']) ?>" target="_blank" style="color: #3b82f6;">
                                     <?= htmlspecialchars($link['short_code']) ?>
                                 </a></strong>
-                                <?php if (!empty($link['password'])): ?>
+                                <?php if ($has_password && !empty($link['password'])): ?>
                                     <br><span class="badge badge-password"><i class="fas fa-lock"></i> Protected</span>
                                 <?php endif; ?>
                             </td>
@@ -294,19 +356,19 @@ try {
                             </td>
                             <td><strong><?= number_format($link['clicks']) ?></strong></td>
                             <td>
-                                <?php if ($link['is_banned']): ?>
+                                <?php if ($has_is_banned && !empty($link['is_banned'])): ?>
                                     <span class="badge badge-blocked"><i class="fas fa-ban"></i> BLOCKED</span>
-                                    <?php if (!empty($link['banned_at'])): ?>
+                                    <?php if ($has_banned_at && !empty($link['banned_at'])): ?>
                                         <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
                                             <?= date('M j, Y', strtotime($link['banned_at'])) ?>
                                         </div>
                                     <?php endif; ?>
-                                <?php elseif (!empty($link['expires_at']) && strtotime($link['expires_at']) < time()): ?>
+                                <?php elseif ($has_expires_at && !empty($link['expires_at']) && strtotime($link['expires_at']) < time()): ?>
                                     <span class="badge badge-expired"><i class="fas fa-clock"></i> EXPIRED</span>
                                 <?php else: ?>
                                     <span class="badge badge-active"><i class="fas fa-check"></i> ACTIVE</span>
                                 <?php endif; ?>
-                                <?php if (!empty($link['expires_at']) && strtotime($link['expires_at']) >= time()): ?>
+                                <?php if ($has_expires_at && !empty($link['expires_at']) && strtotime($link['expires_at']) >= time()): ?>
                                     <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
                                         Expires: <?= date('M j, Y', strtotime($link['expires_at'])) ?>
                                     </div>
@@ -319,14 +381,16 @@ try {
                                 </div>
                             </td>
                             <td style="white-space: nowrap;">
-                                <?php if ($link['is_banned']): ?>
-                                    <a href="?action=unblock&link_id=<?= $link['id'] ?>" class="btn btn-unblock" onclick="return confirm('Unblock this link?')">
-                                        <i class="fas fa-check"></i> Unblock
-                                    </a>
-                                <?php else: ?>
-                                    <a href="?action=block&link_id=<?= $link['id'] ?>" class="btn btn-block" onclick="return confirm('Block this link? It will no longer be accessible.')">
-                                        <i class="fas fa-ban"></i> Block
-                                    </a>
+                                <?php if ($has_is_banned): ?>
+                                    <?php if (!empty($link['is_banned'])): ?>
+                                        <a href="?action=unblock&link_id=<?= $link['id'] ?>" class="btn btn-unblock" onclick="return confirm('Unblock this link?')">
+                                            <i class="fas fa-check"></i> Unblock
+                                        </a>
+                                    <?php else: ?>
+                                        <a href="?action=block&link_id=<?= $link['id'] ?>" class="btn btn-block" onclick="return confirm('Block this link? It will no longer be accessible.')">
+                                            <i class="fas fa-ban"></i> Block
+                                        </a>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                                 
                                 <a href="<?= SITE_URL ?>/<?= htmlspecialchars($link['short_code']) ?>" target="_blank" class="btn btn-view">
