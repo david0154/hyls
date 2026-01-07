@@ -1,5 +1,5 @@
 <?php
-// Save as: r.php (main redirect handler)
+// r.php - URL redirect handler with ads and earnings
 require_once 'config.php';
 require_once 'includes/db.php';
 require_once 'includes/functions.php';
@@ -21,6 +21,7 @@ if (!$link) {
     exit;
 }
 
+// Track analytics
 $ip = $_SERVER['REMOTE_ADDR'];
 $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
 $referrer = $_SERVER['HTTP_REFERER'] ?? '';
@@ -28,20 +29,32 @@ $referrer = $_SERVER['HTTP_REFERER'] ?? '';
 $stmt = $db->prepare("INSERT INTO analytics (link_id, ip_address, user_agent, referrer) VALUES (?, ?, ?, ?)");
 $stmt->execute([$link['id'], $ip, $user_agent, $referrer]);
 
+// Update clicks
 $db->prepare("UPDATE short_links SET clicks = clicks + 1 WHERE id = ?")->execute([$link['id']]);
 
+// Calculate and add earnings
 $settings = getSettings($db);
-$ads_enabled = $settings['ads_enabled'] ?? 1;
-$ads_duration = $settings['ads_duration'] ?? 5;
+$earning_per_click = floatval($settings['earning_per_click'] ?? 0.001);
+$db->prepare("UPDATE short_links SET earnings = earnings + ? WHERE id = ?")->execute([$earning_per_click, $link['id']]);
+$db->prepare("UPDATE users SET earnings = earnings + ? WHERE id = ?")->execute([$earning_per_click, $link['user_id']]);
 
-if ($ads_enabled):
+$ads_enabled = $settings['ads_enabled'] ?? 1;
+$ads_duration = intval($settings['ads_duration'] ?? 5);
+
+// Get active advertisement
+$stmt = $db->prepare("SELECT * FROM advertisements WHERE is_active = 1 ORDER BY position ASC LIMIT 1");
+$stmt->execute();
+$ad = $stmt->fetch();
+
+if ($ads_enabled && $ad):
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Redirecting...</title>
+    <title>Redirecting... - <?= SITE_NAME ?></title>
+    <link rel="icon" type="image/x-icon" href="<?= SITE_URL ?>/assets/favicon.ico">
     <?php if (!empty($settings['ga_tracking_id'])): ?>
     <script async src="https://www.googletagmanager.com/gtag/js?id=<?= $settings['ga_tracking_id'] ?>"></script>
     <script>
@@ -75,20 +88,21 @@ if ($ads_enabled):
             margin-bottom: 30px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
         }
+        .ad-logo {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        .ad-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
         .ad-title {
             color: #6366f1;
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 16px;
-        }
-        .ad-subtitle {
-            color: #64748b;
-            font-size: 18px;
-            margin-bottom: 24px;
-        }
-        .ad-logo {
-            font-size: 64px;
-            margin-bottom: 20px;
         }
         .ad-description {
             color: #334155;
@@ -125,20 +139,6 @@ if ($ads_enabled):
             font-weight: 700;
             margin: 20px 0;
         }
-        .skip-btn {
-            display: inline-block;
-            padding: 10px 24px;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            margin-top: 16px;
-            transition: all 0.3s;
-        }
-        .skip-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
         .progress-bar {
             width: 100%;
             height: 6px;
@@ -153,20 +153,36 @@ if ($ads_enabled):
             width: 0%;
             transition: width 0.1s linear;
         }
+        .skip-btn {
+            display: inline-block;
+            padding: 10px 24px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-top: 16px;
+            transition: all 0.3s;
+        }
+        .skip-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="ad-box">
+            <?php if ($ad['image_url']): ?>
+            <img src="<?= htmlspecialchars($ad['image_url']) ?>" alt="<?= htmlspecialchars($ad['title']) ?>" class="ad-image">
+            <?php else: ?>
             <div class="ad-logo">💬</div>
-            <h2 class="ad-title">Visit HypeChats</h2>
-            <p class="ad-subtitle">The Best Social Platform for Creators</p>
-            <p class="ad-description">
-                Connect with millions of users, share your content, and grow your audience. 
-                HypeChats offers powerful tools for creators, influencers, and businesses.
-            </p>
-            <a href="https://hypechats.com" target="_blank" class="btn-visit">
-                Visit HypeChats Now →
+            <?php endif; ?>
+            <h2 class="ad-title"><?= htmlspecialchars($ad['title']) ?></h2>
+            <?php if ($ad['description']): ?>
+            <p class="ad-description"><?= nl2br(htmlspecialchars($ad['description'])) ?></p>
+            <?php endif; ?>
+            <a href="<?= htmlspecialchars($ad['url']) ?>" target="_blank" rel="noopener" class="btn-visit">
+                <?= htmlspecialchars($ad['cta_text']) ?> →
             </a>
         </div>
         
@@ -198,7 +214,7 @@ if ($ads_enabled):
             const progressPercent = ((totalTime - timeLeft) / totalTime) * 100;
             progress.style.width = progressPercent + '%';
             
-            if (timeLeft === 3) {
+            if (timeLeft === Math.ceil(totalTime / 2)) {
                 skipBtn.style.display = 'inline-block';
             }
             
