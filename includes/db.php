@@ -8,29 +8,37 @@ class Database {
     
     public function __construct() {
         try {
-            // Verify that database constants are defined
-            if (!defined('DB_HOST')) {
-                throw new Exception('Database configuration error: DB_HOST is not defined. Check your config.php or environment variables.');
-            }
-            if (!defined('DB_NAME')) {
-                throw new Exception('Database configuration error: DB_NAME is not defined. Check your config.php or environment variables.');
-            }
-            if (!defined('DB_USER')) {
-                throw new Exception('Database configuration error: DB_USER is not defined. Check your config.php or environment variables.');
+            // Check if configuration is complete
+            if (!defined('DB_HOST') || !defined('DB_NAME') || !defined('DB_USER')) {
+                die(
+                    '<h1>⚠️ Configuration Error</h1>' .
+                    '<p>The application is not properly configured.</p>' .
+                    '<p>Please run the installation wizard at:</p>' .
+                    '<p><a href="install.php">https://yourdomain.com/install.php</a></p>' .
+                    '<p>Or contact your administrator.</p>' .
+                    '<p style="color: #999; margin-top: 20px; font-size: 12px;">If install.php has been deleted, restore it with: git checkout install.php</p>'
+                );
             }
             
             $this->conn = new PDO(
                 "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
                 DB_USER,
-                DB_PASS,
+                DB_PASS ?? '',
                 [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
             );
         } catch (PDOException $e) {
             error_log("Database connection failed: " . $e->getMessage());
-            die("Database connection failed. Please check your configuration.");
-        } catch (Exception $e) {
-            error_log("Database error: " . $e->getMessage());
-            die($e->getMessage());
+            die(
+                '<h1>🔴 Database Connection Error</h1>' .
+                '<p>Could not connect to the database.</p>' .
+                '<p>Error: ' . htmlspecialchars($e->getMessage()) . '</p>' .
+                '<p style="color: #999; margin-top: 20px; font-size: 12px;">Please check:</p>' .
+                '<ul style="color: #999; font-size: 12px;">' .
+                '<li>MySQL is running</li>' .
+                '<li>Database credentials are correct in config.php</li>' .
+                '<li>Database server is accessible</li>' .
+                '</ul>'
+            );
         }
     }
     
