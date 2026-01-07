@@ -2,6 +2,87 @@
 // includes/functions.php - Helper functions
 
 /**
+ * Sanitize URL - add protocol if missing
+ */
+function sanitizeUrl($url) {
+    $url = trim($url);
+    if (empty($url)) {
+        return false;
+    }
+    
+    // Add http:// if no protocol specified
+    if (!preg_match('~^(?:f|ht)tps?://~i', $url)) {
+        $url = 'http://' . $url;
+    }
+    
+    // Validate URL
+    if (!isValidUrl($url)) {
+        return false;
+    }
+    
+    return $url;
+}
+
+/**
+ * Create short link
+ */
+function createShortLink($db, $user_id, $url, $custom_code = null, $title = null) {
+    try {
+        // Validate user exists
+        $stmt = $db->prepare("SELECT id FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        if (!$stmt->fetch()) {
+            return ['success' => false, 'message' => 'User not found'];
+        }
+        
+        // Determine short code
+        if ($custom_code) {
+            // Check if custom code is unique
+            if (!isShortCodeUnique($db, $custom_code)) {
+                return ['success' => false, 'message' => 'Custom code already taken'];
+            }
+            $code = $custom_code;
+        } else {
+            // Generate unique code
+            $code = createUniqueShortCode($db);
+        }
+        
+        // Prepare title
+        if (empty($title)) {
+            $title = null;
+        }
+        
+        // Insert into database
+        $stmt = $db->prepare("INSERT INTO short_links (user_id, short_code, original_url, title, clicks, earnings, created_at) VALUES (?, ?, ?, ?, 0, 0, NOW())");
+        
+        if (!$stmt->execute([$user_id, $code, $url, $title])) {
+            return ['success' => false, 'message' => 'Failed to create link'];
+        }
+        
+        // Get inserted ID
+        $link_id = $db->lastInsertId();
+        
+        // Log activity
+        logActivity($db, $user_id, 'create_link', 'Created short link: ' . $code);
+        
+        // Build full short URL
+        $short_url = SITE_URL . '/' . $code;
+        
+        return [
+            'success' => true,
+            'message' => 'Short link created successfully',
+            'url' => $short_url,
+            'code' => $code,
+            'id' => $link_id
+        ];
+        
+    } catch (Exception $e) {
+        error_log("createShortLink Error: " . $e->getMessage());
+        return ['success' => false, 'message' => 'Database error: ' . $e->getMessage()];
+    }
+}
+
+/**
  * Get all settings from database
  */
 function getSettings($db) {
@@ -76,18 +157,34 @@ function generateShortCode($length = 6) {
  * Check if short code is unique
  */
 function isShortCodeUnique($db, $code) {
-    $stmt = $db->prepare("SELECT id FROM short_links WHERE short_code = ?");
-    $stmt->execute([$code]);
-    return !$stmt->fetch();
+    try {
+        $stmt = $db->prepare("SELECT id FROM short_links WHERE short_code = ?");
+        $stmt->execute([$code]);
+        return !$stmt->fetch();
+    } catch (Exception $e) {
+        error_log("isShortCodeUnique Error: " . $e->getMessage());
+        return false;
+    }
 }
 
 /**
  * Create unique short code
  */
 function createUniqueShortCode($db, $length = 6) {
+    $attempts = 0;
+    $max_attempts = 10;
+    
     do {
         $code = generateShortCode($length);
-    } while (!isShortCodeUnique($db, $code));
+        $attempts++;
+        
+        if ($attempts > $max_attempts) {
+            // Increase length if too many collisions
+            $length++;
+            $attempts = 0;
+        }
+    } while (!isShortCodeUnique($db, $code) && $attempts < $max_attempts);
+    
     return $code;
 }
 
@@ -171,20 +268,30 @@ function sanitizeUsername($username) {
  * Check if user is admin
  */
 function isAdmin($db, $user_id) {
-    $stmt = $db->prepare("SELECT is_admin FROM users WHERE id = ?");
-    $stmt->execute([$user_id]);
-    $user = $stmt->fetch();
-    return $user && $user['is_admin'];
+    try {
+        $stmt = $db->prepare("SELECT is_admin FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        $user = $stmt->fetch();
+        return $user && $user['is_admin'];
+    } catch (Exception $e) {
+        error_log("isAdmin Error: " . $e->getMessage());
+        return false;
+    }
 }
 
 /**
  * Get user earnings
  */
 function getUserEarnings($db, $user_id) {
-    $stmt = $db->prepare("SELECT earnings FROM users WHERE id = ?");
-    $stmt->execute([$user_id]);
-    $user = $stmt->fetch();
-    return $user ? floatval($user['earnings']) : 0;
+    try {
+        $stmt = $db->prepare("SELECT earnings FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        $user = $stmt->fetch();
+        return $user ? floatval($user['earnings']) : 0;
+    } catch (Exception $e) {
+        error_log("getUserEarnings Error: " . $e->getMessage());
+        return 0;
+    }
 }
 
 /**
