@@ -203,6 +203,18 @@ try {
             background: #f1f5f9;
             color: #6366f1;
         }
+        .sidebar .section-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #94a3b8;
+            font-weight: 700;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            padding: 0 16px;
+        }
+        .sidebar .section-title:first-child {
+            margin-top: 0;
+        }
         .main-content {
             flex: 1;
             padding: 40px;
@@ -375,9 +387,15 @@ try {
 
     <div class="admin-container">
         <div class="sidebar">
+            <div class="section-title">Dashboard</div>
             <a href="?page=overview" class="<?= $page === 'overview' ? 'active' : '' ?>">📊 Overview</a>
+            <a href="updates.php" class="<?= $page === 'updates' ? 'active' : '' ?>">🔄 Updates</a>
+            
+            <div class="section-title">Management</div>
             <a href="?page=settings" class="<?= $page === 'settings' ? 'active' : '' ?>">⚙️ Settings</a>
             <a href="?page=ads" class="<?= $page === 'ads' ? 'active' : '' ?>">📢 Advertisements</a>
+            
+            <div class="section-title">Data</div>
             <a href="?page=users" class="<?= $page === 'users' ? 'active' : '' ?>">👥 Users</a>
             <a href="?page=links" class="<?= $page === 'links' ? 'active' : '' ?>">🔗 Links</a>
         </div>
