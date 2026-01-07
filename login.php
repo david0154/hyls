@@ -1,7 +1,3 @@
-// ===========================
-// FILE: login.php
-// ===========================
-
 <?php
 session_start();
 require_once 'config.php';
@@ -12,7 +8,8 @@ if (isset($_SESSION['user_id'])) {
     exit;
 }
 
-$error = '';
+$error = $_SESSION['error'] ?? '';
+unset($_SESSION['error']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = $_POST['username'] ?? '';
@@ -23,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->execute([$username, $username]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    if ($user && password_verify($password, $user['password'])) {
+    if ($user && $user['password'] && password_verify($password, $user['password'])) {
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['username'] = $user['username'];
         $_SESSION['profile_picture'] = $user['profile_picture'];
@@ -33,13 +30,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Invalid username or password';
     }
 }
+
+$oauth_url = 'https://hypechats.com/oauth/authorize?client_id=' . APP_ID . '&redirect_uri=' . urlencode(SITE_URL . '/auth.php') . '&response_type=code&scope=profile email';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - HYLS</title>
+    <title>Login - <?= SITE_NAME ?></title>
+    <meta name="description" content="<?= SITE_DESCRIPTION ?>">
+    <link rel="icon" type="image/x-icon" href="<?= SITE_URL ?>/assets/favicon.ico">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -67,6 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #6366f1;
             font-size: 32px;
             margin-bottom: 8px;
+        }
+        .logo p {
+            color: #64748b;
+            font-size: 14px;
         }
         .form-group {
             margin-bottom: 20px;
@@ -99,6 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-weight: 600;
             cursor: pointer;
             margin-bottom: 16px;
+            transition: transform 0.2s;
         }
         .btn-login:hover {
             transform: translateY(-2px);
@@ -114,8 +120,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 16px;
             font-weight: 600;
             text-decoration: none;
-            display: block;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+        .oauth-btn:hover {
+            background: #f8f9ff;
         }
         .error {
             background: #fee2e2;
@@ -123,18 +135,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 12px;
             border-radius: 8px;
             margin-bottom: 20px;
+            font-size: 14px;
         }
         .divider {
             text-align: center;
             margin: 20px 0;
             color: #64748b;
+            position: relative;
         }
+        .divider::before,
+        .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background: #e2e8f0;
+        }
+        .divider::before { left: 0; }
+        .divider::after { right: 0; }
     </style>
 </head>
 <body>
     <div class="login-box">
         <div class="logo">
-            <h1>🔗 HYLS</h1>
+            <h1>🔗 <?= SITE_NAME ?></h1>
             <p>Sign in to your account</p>
         </div>
 
@@ -145,7 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <form method="POST">
             <div class="form-group">
                 <label>Username or Email</label>
-                <input type="text" name="username" required>
+                <input type="text" name="username" required autofocus>
             </div>
 
             <div class="form-group">
@@ -153,12 +178,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="password" name="password" required>
             </div>
 
-            <button type="submit" class="btn-login">Sign In</button>
+            <button type="submit" class="btn-login">🔓 Sign In</button>
         </form>
 
         <div class="divider">OR</div>
 
-        <a href="https://hypechats.com/oauth?app_id=<?= APP_ID ?>" class="oauth-btn">
+        <a href="<?= htmlspecialchars($oauth_url) ?>" class="oauth-btn">
             💬 Sign in with HypeChats
         </a>
     </div>
