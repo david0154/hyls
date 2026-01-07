@@ -108,6 +108,7 @@ try {
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['username'] = $user['username'];
         $_SESSION['profile_picture'] = $hype_user['profile_picture'] ?? $user['profile_picture'];
+        $_SESSION['is_admin'] = $user['is_admin'] ?? 0;
         $_SESSION['success'] = 'Welcome back, ' . htmlspecialchars($hype_user['first_name'] ?? $user['username']) . '!';
         
         error_log("User login: " . $user['username'] . " (ID: " . $user['id'] . ")");
@@ -135,8 +136,8 @@ try {
         
         // Insert new user
         $insert_stmt = $db->prepare("INSERT INTO users 
-            (hype_id, username, email, first_name, last_name, profile_picture, access_token, created_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
+            (hype_id, username, email, first_name, last_name, profile_picture, access_token, is_admin, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())");
         
         if (!$insert_stmt) {
             throw new Exception('Database error: Failed to prepare insert statement');
@@ -176,6 +177,7 @@ try {
         $_SESSION['user_id'] = $user_id;
         $_SESSION['username'] = $username;
         $_SESSION['profile_picture'] = $hype_user['profile_picture'] ?? '';
+        $_SESSION['is_admin'] = 0;
         $_SESSION['success'] = 'Welcome to HYLS! Your account has been created successfully. Your bio page is ready to customize.';
         
         error_log("New user created: " . $username . " (ID: " . $user_id . ") via HypeChats OAuth");
