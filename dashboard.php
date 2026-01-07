@@ -63,6 +63,7 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - HYLS</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <?php if (!empty($settings['ga_tracking_id'])): ?>
     <script async src="https://www.googletagmanager.com/gtag/js?id=<?= $settings['ga_tracking_id'] ?>"></script>
     <script>
@@ -102,6 +103,9 @@ try {
             font-weight: 700;
             color: #6366f1;
             text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .nav-user {
             display: flex;
@@ -137,6 +141,9 @@ try {
             border-radius: 6px;
             font-weight: 600;
             transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
         .btn-logout:hover {
             background: #dc2626;
@@ -149,6 +156,9 @@ try {
             border-radius: 6px;
             font-weight: 600;
             transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
         .btn-admin:hover {
             background: #4f46e5;
@@ -203,6 +213,9 @@ try {
         .welcome-section h1 {
             font-size: 36px;
             margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
         .stats-grid {
             display: grid;
@@ -219,6 +232,7 @@ try {
         .stat-icon {
             font-size: 32px;
             margin-bottom: 12px;
+            color: #6366f1;
         }
         .stat-value {
             font-size: 32px;
@@ -242,7 +256,9 @@ try {
             text-decoration: none;
             font-weight: 600;
             transition: all 0.3s;
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
             border: none;
             cursor: pointer;
         }
@@ -293,6 +309,9 @@ try {
             color: #6366f1;
             font-size: 18px;
             margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .link-original {
             color: #64748b;
@@ -331,6 +350,9 @@ try {
             transition: all 0.3s;
             border: none;
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
         .btn-copy {
             background: #10b981;
@@ -356,6 +378,7 @@ try {
         .empty-icon {
             font-size: 64px;
             margin-bottom: 16px;
+            color: #cbd5e1;
         }
         .modal {
             display: none;
@@ -419,6 +442,9 @@ try {
                 flex-direction: column;
                 align-items: flex-start;
             }
+            .nav-user {
+                flex-wrap: wrap;
+            }
         }
     </style>
 </head>
@@ -426,16 +452,22 @@ try {
     <nav class="navbar">
         <div class="container">
             <div class="nav-content">
-                <a href="dashboard.php" class="logo">🔗 HYLS</a>
+                <a href="dashboard.php" class="logo">
+                    <i class="fas fa-link"></i> HYLS
+                </a>
                 <div class="nav-user">
                     <div class="user-info">
                         <div class="user-avatar"><?= strtoupper(substr($user['username'], 0, 1)) ?></div>
                         <span class="user-name"><?= htmlspecialchars($user['username']) ?></span>
                     </div>
                     <?php if ($user['is_admin']): ?>
-                    <a href="admin/" class="btn-admin">👑 Admin</a>
+                    <a href="admin/" class="btn-admin">
+                        <i class="fas fa-crown"></i> Admin
+                    </a>
                     <?php endif; ?>
-                    <a href="logout.php" class="btn-logout">Logout</a>
+                    <a href="logout.php" class="btn-logout">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </a>
                 </div>
             </div>
         </div>
@@ -457,38 +489,47 @@ try {
         <?php endif; ?>
 
         <div class="welcome-section">
-            <h1>Welcome back, <?= htmlspecialchars($user['first_name'] ?? $user['username']) ?>! 👋</h1>
+            <h1>
+                <i class="fas fa-hand-sparkles"></i>
+                Welcome back, <?= htmlspecialchars($user['first_name'] ?? $user['username']) ?>!
+            </h1>
             <p>Manage your links and bio page from your dashboard</p>
         </div>
 
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-icon">🔗</div>
+                <div class="stat-icon"><i class="fas fa-link"></i></div>
                 <div class="stat-value"><?= count($short_links) ?></div>
                 <div class="stat-label">Total Links</div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">📊</div>
+                <div class="stat-icon"><i class="fas fa-mouse-pointer"></i></div>
                 <div class="stat-value"><?= number_format($total_clicks) ?></div>
                 <div class="stat-label">Total Clicks</div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">👤</div>
+                <div class="stat-icon"><i class="fas fa-user"></i></div>
                 <div class="stat-value"><?= $bio_link ? 'Active' : 'Not Set' ?></div>
                 <div class="stat-label">Bio Link Status</div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">💰</div>
+                <div class="stat-icon"><i class="fas fa-dollar-sign"></i></div>
                 <div class="stat-value">$<?= number_format($user['earnings'] ?? 0, 2) ?></div>
                 <div class="stat-label">Total Earnings</div>
             </div>
         </div>
 
         <div class="action-buttons">
-            <button onclick="openModal('createLinkModal')" class="btn btn-primary">➕ Create Short Link</button>
-            <a href="biolink.php" class="btn btn-secondary">✏️ Edit Bio Link</a>
+            <button onclick="openModal('createLinkModal')" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Create Short Link
+            </button>
+            <a href="biolink.php" class="btn btn-secondary">
+                <i class="fas fa-edit"></i> Edit Bio Link
+            </a>
             <?php if ($bio_link): ?>
-            <a href="<?= SITE_URL ?>/bio/<?= htmlspecialchars($user['username']) ?>" target="_blank" class="btn btn-secondary">👁️ View Bio Page</a>
+            <a href="<?= SITE_URL ?>/bio/<?= htmlspecialchars($user['username']) ?>" target="_blank" class="btn btn-secondary">
+                <i class="fas fa-eye"></i> View Bio Page
+            </a>
             <?php endif; ?>
         </div>
 
@@ -496,7 +537,7 @@ try {
         
         <?php if (empty($short_links)): ?>
         <div class="empty-state">
-            <div class="empty-icon">🔗</div>
+            <div class="empty-icon"><i class="fas fa-link"></i></div>
             <h3>No links yet</h3>
             <p>Create your first short link to get started!</p>
         </div>
@@ -505,9 +546,12 @@ try {
             <?php foreach ($short_links as $link): ?>
             <div class="link-card">
                 <div class="link-info">
-                    <div class="link-short"><?= SITE_URL ?>/<?= htmlspecialchars($link['short_code']) ?></div>
+                    <div class="link-short">
+                        <i class="fas fa-link"></i>
+                        <?= SITE_URL ?>/<?= htmlspecialchars($link['short_code']) ?>
+                    </div>
                     <div class="link-original" title="<?= htmlspecialchars($link['original_url']) ?>">
-                        <?= htmlspecialchars($link['original_url']) ?>
+                        <i class="fas fa-arrow-right"></i> <?= htmlspecialchars($link['original_url']) ?>
                     </div>
                 </div>
                 <div class="link-stats">
@@ -521,8 +565,12 @@ try {
                     </div>
                 </div>
                 <div class="link-actions">
-                    <button onclick="copyLink('<?= SITE_URL ?>/<?= htmlspecialchars($link['short_code']) ?>')" class="btn-small btn-copy">Copy</button>
-                    <a href="delete_link.php?id=<?= $link['id'] ?>" onclick="return confirm('Delete this link?')" class="btn-small btn-delete">Delete</a>
+                    <button onclick="copyLink('<?= SITE_URL ?>/<?= htmlspecialchars($link['short_code']) ?>')" class="btn-small btn-copy">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                    <a href="delete_link.php?id=<?= $link['id'] ?>" onclick="return confirm('Delete this link?')" class="btn-small btn-delete">
+                        <i class="fas fa-trash"></i> Delete
+                    </a>
                 </div>
             </div>
             <?php endforeach; ?>
@@ -532,7 +580,7 @@ try {
 
     <div id="createLinkModal" class="modal">
         <div class="modal-content">
-            <h2 class="modal-title">Create Short Link</h2>
+            <h2 class="modal-title"><i class="fas fa-link"></i> Create Short Link</h2>
             <form action="shorten.php" method="POST">
                 <div class="form-group">
                     <label>Original URL <span style="color: #ef4444;">*</span></label>
@@ -548,7 +596,7 @@ try {
                 </div>
                 <div class="modal-buttons">
                     <button type="button" onclick="closeModal('createLinkModal')" class="btn btn-secondary">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create Link</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Create Link</button>
                 </div>
             </form>
         </div>
