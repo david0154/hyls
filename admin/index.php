@@ -1,701 +1,583 @@
 <?php
-// admin/index.php - Admin dashboard
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-
 session_start();
-require_once '../config.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 
-if (!isset($_SESSION['user_id'])) {
+// Check admin access
+if (!isset($_SESSION['user_id']) || !$_SESSION['is_admin']) {
     header('Location: ../login.php');
     exit;
 }
 
-try {
-    $db = new Database();
-    $stmt = $db->prepare("SELECT is_admin FROM users WHERE id = ?");
-    $stmt->execute([$_SESSION['user_id']]);
-    $user = $stmt->fetch();
+$db = new Database();
 
-    if (!$user || !$user['is_admin']) {
-        header('Location: ../dashboard.php');
-        exit;
-    }
-} catch (Exception $e) {
-    error_log("Admin Dashboard Error: " . $e->getMessage());
-    die("Database connection error. Please check your configuration.");
-}
+// Get statistics
+$total_users = $db->query("SELECT COUNT(*) as count FROM users")->fetch(PDO::FETCH_ASSOC)['count'];
+$total_links = $db->query("SELECT COUNT(*) as count FROM short_links")->fetch(PDO::FETCH_ASSOC)['count'];
+$total_clicks = $db->query("SELECT SUM(clicks) as total FROM short_links")->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+$total_earnings = $db->query("SELECT SUM(earnings) as total FROM short_links")->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+$active_links = $db->query("SELECT COUNT(*) as count FROM short_links WHERE is_banned = 0")->fetch(PDO::FETCH_ASSOC)['count'];
+$banned_links = $db->query("SELECT COUNT(*) as count FROM short_links WHERE is_banned = 1")->fetch(PDO::FETCH_ASSOC)['count'];
 
-$success = '';
-$error = '';
-$page = $_GET['page'] ?? 'overview';
+// Get recent links
+$recent_links = $db->query("SELECT l.*, u.username FROM short_links l LEFT JOIN users u ON l.user_id = u.id ORDER BY l.created_at DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
 
-// Handle actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
-    
-    if ($action === 'update_settings') {
-        try {
-            $settings_to_update = [
-                'site_name', 'site_description', 'site_keywords', 'theme_color',
-                'ads_enabled', 'ads_duration', 'earning_per_click', 'min_payout',
-                'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_from'
-            ];
-            
-            foreach ($settings_to_update as $key) {
-                $value = $_POST[$key] ?? '';
-                $stmt = $db->prepare("UPDATE settings SET setting_value = ? WHERE setting_key = ?");
-                $stmt->execute([$value, $key]);
-            }
-            
-            $success = 'Settings updated successfully!';
-        } catch (Exception $e) {
-            $error = 'Failed to update settings: ' . $e->getMessage();
-            error_log("Settings Update Error: " . $e->getMessage());
-        }
-    }
-    
-    elseif ($action === 'add_ad') {
-        try {
-            $title = $_POST['ad_title'] ?? '';
-            $description = $_POST['ad_description'] ?? '';
-            $url = $_POST['ad_url'] ?? '';
-            $cta_text = $_POST['ad_cta'] ?? 'Visit Now';
-            $is_active = isset($_POST['ad_active']) ? 1 : 0;
-            
-            $stmt = $db->prepare("INSERT INTO advertisements (title, description, url, cta_text, is_active) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute([$title, $description, $url, $cta_text, $is_active]);
-            
-            $success = 'Advertisement added successfully!';
-        } catch (Exception $e) {
-            $error = 'Failed to add advertisement: ' . $e->getMessage();
-            error_log("Add Advertisement Error: " . $e->getMessage());
-        }
-    }
-    
-    elseif ($action === 'delete_ad') {
-        try {
-            $ad_id = $_POST['ad_id'] ?? 0;
-            $stmt = $db->prepare("DELETE FROM advertisements WHERE id = ?");
-            $stmt->execute([$ad_id]);
-            $success = 'Advertisement deleted successfully!';
-        } catch (Exception $e) {
-            $error = 'Failed to delete advertisement: ' . $e->getMessage();
-            error_log("Delete Advertisement Error: " . $e->getMessage());
-        }
-    }
-    
-    elseif ($action === 'toggle_ad') {
-        try {
-            $ad_id = $_POST['ad_id'] ?? 0;
-            $stmt = $db->prepare("UPDATE advertisements SET is_active = NOT is_active WHERE id = ?");
-            $stmt->execute([$ad_id]);
-            $success = 'Advertisement status updated!';
-        } catch (Exception $e) {
-            $error = 'Failed to update advertisement: ' . $e->getMessage();
-            error_log("Toggle Advertisement Error: " . $e->getMessage());
-        }
-    }
-}
+// Get recent users
+$recent_users = $db->query("SELECT * FROM users ORDER BY created_at DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
 
-// Get statistics with error handling
-try {
-    $stats = [
-        'total_users' => 0,
-        'total_links' => 0,
-        'total_clicks' => 0,
-        'total_bio_links' => 0,
-        'total_earnings' => 0
-    ];
-    
-    $result = $db->query("SELECT COUNT(*) as count FROM users");
-    if ($result) $stats['total_users'] = $result->fetch()['count'];
-    
-    $result = $db->query("SELECT COUNT(*) as count FROM short_links");
-    if ($result) $stats['total_links'] = $result->fetch()['count'];
-    
-    $result = $db->query("SELECT SUM(clicks) as count FROM short_links");
-    if ($result) $stats['total_clicks'] = $result->fetch()['count'] ?? 0;
-    
-    $result = $db->query("SELECT COUNT(*) as count FROM bio_links");
-    if ($result) $stats['total_bio_links'] = $result->fetch()['count'];
-    
-    $result = $db->query("SELECT SUM(earnings) as total FROM users");
-    if ($result) $stats['total_earnings'] = $result->fetch()['total'] ?? 0;
-} catch (Exception $e) {
-    error_log("Statistics Error: " . $e->getMessage());
-    $stats = [
-        'total_users' => 0,
-        'total_links' => 0,
-        'total_clicks' => 0,
-        'total_bio_links' => 0,
-        'total_earnings' => 0
-    ];
-}
-
-// Get settings with error handling
-try {
-    $settings = getSettings($db);
-} catch (Exception $e) {
-    error_log("getSettings Error: " . $e->getMessage());
-    $settings = [];
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - <?= SITE_NAME ?></title>
-    <link rel="icon" type="image/x-icon" href="<?= SITE_URL ?>/assets/favicon.ico">
+    <title>Admin Dashboard - HYLS</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #208091;
+            --primary-dark: #1a6a78;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #c01537;
+            --info: #3b82f6;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --text: #1f2937;
+            --text-light: #6b7280;
+            --border: #e5e7eb;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #f8fafc;
-            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
         }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
         .navbar {
-            background: white;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            padding: 16px 24px;
+            background: var(--card);
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .navbar-brand i {
+            font-size: 28px;
+        }
+
+        .navbar-menu {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .navbar-menu a {
+            padding: 8px 15px;
+            border-radius: 6px;
+            text-decoration: none;
+            color: var(--text);
+            transition: all 0.3s;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .navbar-menu a:hover {
+            background: var(--bg);
+            color: var(--primary);
+        }
+
+        .navbar-menu a.logout {
+            color: white;
+            background: var(--danger);
+        }
+
+        .navbar-menu a.logout:hover {
+            background: #a00c2f;
+        }
+
+        .header {
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            color: var(--text);
+        }
+
+        .header p {
+            color: var(--text-light);
+            font-size: 16px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--card);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid var(--primary);
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card.success {
+            border-left-color: var(--success);
+        }
+
+        .stat-card.warning {
+            border-left-color: var(--warning);
+        }
+
+        .stat-card.danger {
+            border-left-color: var(--danger);
+        }
+
+        .stat-card.info {
+            border-left-color: var(--info);
+        }
+
+        .stat-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            font-size: 24px;
+            color: white;
+            margin-bottom: 15px;
+        }
+
+        .stat-card.primary .stat-icon {
+            background: var(--primary);
+        }
+
+        .stat-card.success .stat-icon {
+            background: var(--success);
+        }
+
+        .stat-card.warning .stat-icon {
+            background: var(--warning);
+        }
+
+        .stat-card.danger .stat-icon {
+            background: var(--danger);
+        }
+
+        .stat-card.info .stat-icon {
+            background: var(--info);
+        }
+
+        .stat-label {
+            display: block;
+            font-size: 13px;
+            text-transform: uppercase;
+            color: var(--text-light);
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text);
+        }
+
+        .section-title i {
+            color: var(--primary);
+        }
+
+        .grid-2col {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+
+        .list-card {
+            background: var(--card);
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .list-card-header {
+            background: #f9fafb;
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-        .navbar h1 {
-            color: #6366f1;
-            font-size: 24px;
+
+        .list-card-header h3 {
+            font-size: 16px;
+            margin: 0;
         }
-        .navbar nav a {
-            color: #64748b;
+
+        .list-card-header a {
+            color: var(--primary);
             text-decoration: none;
-            margin-left: 24px;
+            font-size: 13px;
             font-weight: 600;
+            transition: all 0.3s;
         }
-        .navbar nav a:hover {
-            color: #6366f1;
+
+        .list-card-header a:hover {
+            color: var(--primary-dark);
         }
-        .admin-container {
+
+        .list-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
             display: flex;
-            min-height: calc(100vh - 64px);
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
         }
-        .sidebar {
-            width: 250px;
-            background: white;
-            border-right: 1px solid #e2e8f0;
-            padding: 24px;
+
+        .list-item:last-child {
+            border-bottom: none;
         }
-        .sidebar a {
-            display: block;
-            padding: 12px 16px;
-            color: #64748b;
-            text-decoration: none;
-            border-radius: 8px;
-            margin-bottom: 8px;
-            font-weight: 600;
-        }
-        .sidebar a:hover,
-        .sidebar a.active {
-            background: #f1f5f9;
-            color: #6366f1;
-        }
-        .sidebar .section-title {
-            font-size: 12px;
-            text-transform: uppercase;
-            color: #94a3b8;
-            font-weight: 700;
-            margin-top: 20px;
-            margin-bottom: 8px;
-            padding: 0 16px;
-        }
-        .sidebar .section-title:first-child {
-            margin-top: 0;
-        }
-        .main-content {
+
+        .list-item-content {
             flex: 1;
-            padding: 40px;
+            min-width: 0;
         }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 24px;
-            margin-bottom: 40px;
-        }
-        .stat-card {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .stat-card h3 {
-            color: #64748b;
-            font-size: 14px;
+
+        .list-item-title {
             font-weight: 600;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
+            color: var(--text);
         }
-        .stat-card .value {
-            color: #1e293b;
-            font-size: 32px;
-            font-weight: 700;
+
+        .list-item-subtitle {
+            font-size: 13px;
+            color: var(--text-light);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
-        .card {
-            background: white;
-            border-radius: 16px;
-            padding: 32px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 24px;
+
+        .list-item-meta {
+            font-size: 13px;
+            color: var(--text-light);
+            text-align: right;
         }
-        .card h2 {
-            color: #1e293b;
-            font-size: 24px;
-            margin-bottom: 24px;
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
         }
-        .alert {
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .alert-success {
+
+        .badge-success {
             background: #d1fae5;
             color: #065f46;
         }
-        .alert-error {
+
+        .badge-danger {
             background: #fee2e2;
             color: #991b1b;
         }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            color: #334155;
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-        .form-group input,
-        .form-group textarea,
-        .form-group select {
-            width: 100%;
-            padding: 12px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-        .form-group textarea {
-            resize: vertical;
-            min-height: 100px;
-            font-family: inherit;
-        }
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-        .btn-primary {
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .btn-danger {
-            padding: 8px 16px;
-            background: #ef4444;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-        .btn-secondary {
-            padding: 8px 16px;
-            background: #64748b;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-        .ad-item {
-            border: 2px solid #f1f5f9;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 16px;
+
+        .action-buttons {
             display: flex;
-            justify-content: space-between;
+            gap: 10px;
+            justify-content: center;
+            padding: 15px;
+            border-top: 1px solid var(--border);
+        }
+
+        .btn {
+            display: inline-flex;
             align-items: center;
-        }
-        .ad-info h4 {
-            color: #1e293b;
-            margin-bottom: 8px;
-        }
-        .ad-info p {
-            color: #64748b;
+            gap: 6px;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            font-weight: 500;
             font-size: 14px;
+            transition: all 0.3s;
         }
-        .ad-actions {
-            display: flex;
-            gap: 8px;
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
         }
-        thead tr {
-            border-bottom: 2px solid #e2e8f0;
+
+        .btn-secondary {
+            background: var(--border);
+            color: var(--text);
         }
-        tbody tr {
-            border-bottom: 1px solid #f1f5f9;
+
+        .btn-secondary:hover {
+            background: #d1d5db;
         }
-        th, td {
-            padding: 12px;
-            text-align: left;
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-light);
         }
-        th {
-            font-weight: 600;
-            color: #334155;
+
+        .empty-state i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.5;
         }
+
         @media (max-width: 768px) {
-            .admin-container {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .grid-2col {
+                grid-template-columns: 1fr;
+            }
+
+            .navbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .navbar-menu {
+                width: 100%;
+                justify-content: flex-start;
                 flex-direction: column;
             }
-            .sidebar {
-                width: 100%;
-            }
-            .form-row {
-                grid-template-columns: 1fr;
+
+            .header h1 {
+                font-size: 24px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="navbar">
-        <h1>👑 Admin Dashboard</h1>
-        <nav>
-            <a href="../dashboard.php">User View</a>
-            <a href="../logout.php">Logout</a>
-        </nav>
-    </div>
-
-    <div class="admin-container">
-        <div class="sidebar">
-            <div class="section-title">Dashboard</div>
-            <a href="?page=overview" class="<?= $page === 'overview' ? 'active' : '' ?>">📊 Overview</a>
-            <a href="updates.php" class="<?= $page === 'updates' ? 'active' : '' ?>">🔄 Updates</a>
-            
-            <div class="section-title">Management</div>
-            <a href="?page=settings" class="<?= $page === 'settings' ? 'active' : '' ?>">⚙️ Settings</a>
-            <a href="?page=ads" class="<?= $page === 'ads' ? 'active' : '' ?>">📢 Advertisements</a>
-            
-            <div class="section-title">Data</div>
-            <a href="?page=users" class="<?= $page === 'users' ? 'active' : '' ?>">👥 Users</a>
-            <a href="?page=links" class="<?= $page === 'links' ? 'active' : '' ?>">🔗 Links</a>
+    <div class="container">
+        <!-- Navbar -->
+        <div class="navbar">
+            <div class="navbar-brand">
+                <i class="fas fa-link"></i>
+                <span>HYLS Admin</span>
+            </div>
+            <div class="navbar-menu">
+                <a href="index.php"><i class="fas fa-home"></i> Dashboard</a>
+                <a href="users.php"><i class="fas fa-users"></i> Users</a>
+                <a href="links.php"><i class="fas fa-link"></i> Links</a>
+                <a href="settings.php"><i class="fas fa-cog"></i> Settings</a>
+                <a href="../logout.php" class="logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </div>
         </div>
 
-        <div class="main-content">
-            <?php if ($success): ?>
-                <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
-            <?php endif; ?>
-            
-            <?php if ($error): ?>
-                <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
-            <?php endif; ?>
+        <!-- Header -->
+        <div class="header">
+            <h1>📄 Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?>!</h1>
+            <p>Here's your admin dashboard overview</p>
+        </div>
 
-            <?php if ($page === 'overview'): ?>
-                <h1 style="margin-bottom: 32px;">📊 Overview</h1>
-                
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <h3>Total Users</h3>
-                        <div class="value"><?= number_format($stats['total_users']) ?></div>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Total Links</h3>
-                        <div class="value"><?= number_format($stats['total_links']) ?></div>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Total Clicks</h3>
-                        <div class="value"><?= number_format($stats['total_clicks']) ?></div>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Bio Links</h3>
-                        <div class="value"><?= number_format($stats['total_bio_links']) ?></div>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Total Earnings</h3>
-                        <div class="value">$<?= number_format($stats['total_earnings'], 2) ?></div>
-                    </div>
-                </div>
+        <!-- Statistics Grid -->
+        <div class="stats-grid">
+            <div class="stat-card primary">
+                <div class="stat-icon"><i class="fas fa-users"></i></div>
+                <span class="stat-label">Total Users</span>
+                <div class="stat-value"><?php echo number_format($total_users); ?></div>
+            </div>
 
-            <?php elseif ($page === 'settings'): ?>
-                <div class="card">
-                    <h2>⚙️ System Settings</h2>
-                    
-                    <form method="POST">
-                        <input type="hidden" name="action" value="update_settings">
-                        
-                        <h3 style="margin-bottom: 16px; color: #6366f1;">Site Information</h3>
-                        
-                        <div class="form-group">
-                            <label>Site Name</label>
-                            <input type="text" name="site_name" value="<?= htmlspecialchars($settings['site_name'] ?? '') ?>" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Site Description</label>
-                            <textarea name="site_description"><?= htmlspecialchars($settings['site_description'] ?? '') ?></textarea>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Site Keywords</label>
-                            <input type="text" name="site_keywords" value="<?= htmlspecialchars($settings['site_keywords'] ?? '') ?>">
-                        </div>
-                        
-                        <h3 style="margin: 32px 0 16px; color: #6366f1;">Ads & Earnings</h3>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Ads Enabled</label>
-                                <select name="ads_enabled">
-                                    <option value="1" <?= ($settings['ads_enabled'] ?? 1) == 1 ? 'selected' : '' ?>>Yes</option>
-                                    <option value="0" <?= ($settings['ads_enabled'] ?? 1) == 0 ? 'selected' : '' ?>>No</option>
-                                </select>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Ads Duration (seconds)</label>
-                                <input type="number" name="ads_duration" value="<?= htmlspecialchars($settings['ads_duration'] ?? 5) ?>" min="3" max="30">
-                            </div>
-                        </div>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Earning Per Click ($)</label>
-                                <input type="number" name="earning_per_click" value="<?= htmlspecialchars($settings['earning_per_click'] ?? 0.001) ?>" step="0.001" min="0">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Minimum Payout ($)</label>
-                                <input type="number" name="min_payout" value="<?= htmlspecialchars($settings['min_payout'] ?? 10) ?>" step="0.01" min="1">
-                            </div>
-                        </div>
-                        
-                        <h3 style="margin: 32px 0 16px; color: #6366f1;">SMTP Configuration</h3>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>SMTP Host</label>
-                                <input type="text" name="smtp_host" value="<?= htmlspecialchars($settings['smtp_host'] ?? '') ?>">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>SMTP Port</label>
-                                <input type="number" name="smtp_port" value="<?= htmlspecialchars($settings['smtp_port'] ?? 587) ?>">
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>SMTP Username</label>
-                            <input type="text" name="smtp_user" value="<?= htmlspecialchars($settings['smtp_user'] ?? '') ?>">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>SMTP Password</label>
-                            <input type="password" name="smtp_pass" value="<?= htmlspecialchars($settings['smtp_pass'] ?? '') ?>">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>From Email</label>
-                            <input type="email" name="smtp_from" value="<?= htmlspecialchars($settings['smtp_from'] ?? '') ?>">
-                        </div>
-                        
-                        <button type="submit" class="btn-primary">💾 Save Settings</button>
-                    </form>
-                </div>
+            <div class="stat-card success">
+                <div class="stat-icon"><i class="fas fa-link"></i></div>
+                <span class="stat-label">Total Links</span>
+                <div class="stat-value"><?php echo number_format($total_links); ?></div>
+            </div>
 
-            <?php elseif ($page === 'ads'): ?>
-                <div class="card">
-                    <h2>📢 Add New Advertisement</h2>
-                    
-                    <form method="POST">
-                        <input type="hidden" name="action" value="add_ad">
-                        
-                        <div class="form-group">
-                            <label>Title</label>
-                            <input type="text" name="ad_title" required>
+            <div class="stat-card info">
+                <div class="stat-icon"><i class="fas fa-mouse-pointer"></i></div>
+                <span class="stat-label">Total Clicks</span>
+                <div class="stat-value"><?php echo number_format($total_clicks); ?></div>
+            </div>
+
+            <div class="stat-card warning">
+                <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+                <span class="stat-label">Total Earnings</span>
+                <div class="stat-value">$<?php echo number_format($total_earnings, 2); ?></div>
+            </div>
+
+            <div class="stat-card success">
+                <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                <span class="stat-label">Active Links</span>
+                <div class="stat-value"><?php echo number_format($active_links); ?></div>
+            </div>
+
+            <div class="stat-card danger">
+                <div class="stat-icon"><i class="fas fa-ban"></i></div>
+                <span class="stat-label">Banned Links</span>
+                <div class="stat-value"><?php echo number_format($banned_links); ?></div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="section">
+            <h2 class="section-title">
+                <i class="fas fa-history"></i>
+                Recent Activity
+            </h2>
+
+            <div class="grid-2col">
+                <!-- Recent Links -->
+                <div class="list-card">
+                    <div class="list-card-header">
+                        <h3><i class="fas fa-link" style="margin-right: 8px;"></i>Recent Links</h3>
+                        <a href="links.php">View All →</a>
+                    </div>
+                    <?php if (empty($recent_links)): ?>
+                        <div class="empty-state">
+                            <i class="fas fa-inbox"></i>
+                            <p>No links yet</p>
                         </div>
-                        
-                        <div class="form-group">
-                            <label>Description</label>
-                            <textarea name="ad_description" required></textarea>
-                        </div>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>URL</label>
-                                <input type="url" name="ad_url" required>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Call-to-Action Text</label>
-                                <input type="text" name="ad_cta" value="Visit Now">
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" name="ad_active" checked>
-                                Active
-                            </label>
-                        </div>
-                        
-                        <button type="submit" class="btn-primary">➕ Add Advertisement</button>
-                    </form>
-                </div>
-                
-                <div class="card">
-                    <h2>📋 Existing Advertisements</h2>
-                    
-                    <?php
-                    try {
-                        $stmt = $db->query("SELECT * FROM advertisements ORDER BY position ASC, created_at DESC");
-                        $ads = $stmt->fetchAll();
-                        
-                        if (empty($ads)):
-                        ?>
-                            <p style="color: #64748b;">No advertisements yet.</p>
-                        <?php else: ?>
-                            <?php foreach ($ads as $ad): ?>
-                            <div class="ad-item">
-                                <div class="ad-info">
-                                    <h4><?= htmlspecialchars($ad['title']) ?></h4>
-                                    <p><?= htmlspecialchars($ad['url']) ?></p>
-                                    <p style="margin-top: 4px;">
-                                        <strong>Status:</strong> 
-                                        <?= $ad['is_active'] ? '<span style="color: #16a34a;">Active</span>' : '<span style="color: #dc2626;">Inactive</span>' ?>
-                                    </p>
+                    <?php else: ?>
+                        <?php foreach ($recent_links as $link): ?>
+                            <div class="list-item">
+                                <div class="list-item-content">
+                                    <div class="list-item-title">
+                                        <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px;"><?php echo htmlspecialchars($link['short_code']); ?></code>
+                                    </div>
+                                    <div class="list-item-subtitle"><?php echo substr(htmlspecialchars($link['original_url']), 0, 40); ?>...</div>
                                 </div>
-                                <div class="ad-actions">
-                                    <form method="POST" style="display: inline;">
-                                        <input type="hidden" name="action" value="toggle_ad">
-                                        <input type="hidden" name="ad_id" value="<?= $ad['id'] ?>">
-                                        <button type="submit" class="btn-secondary">
-                                            <?= $ad['is_active'] ? 'Deactivate' : 'Activate' ?>
-                                        </button>
-                                    </form>
-                                    <form method="POST" style="display: inline;" onsubmit="return confirm('Delete this ad?');">
-                                        <input type="hidden" name="action" value="delete_ad">
-                                        <input type="hidden" name="ad_id" value="<?= $ad['id'] ?>">
-                                        <button type="submit" class="btn-danger">Delete</button>
-                                    </form>
+                                <div class="list-item-meta">
+                                    <?php echo htmlspecialchars($link['username'] ?? 'Guest'); ?><br>
+                                    <small><?php echo timeago($link['created_at']); ?></small>
                                 </div>
                             </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    <?php } catch (Exception $e) {
-                        error_log("Advertisements Query Error: " . $e->getMessage());
-                        echo '<p style="color: #dc2626;">Error loading advertisements.</p>';
-                    } ?>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    <div class="action-buttons">
+                        <a href="links.php" class="btn btn-primary"><i class="fas fa-list"></i> Manage Links</a>
+                    </div>
                 </div>
 
-            <?php elseif ($page === 'users'): ?>
-                <div class="card">
-                    <h2>👥 All Users</h2>
-                    
-                    <?php
-                    try {
-                        $stmt = $db->query("SELECT u.*, COUNT(DISTINCT sl.id) as link_count, SUM(sl.clicks) as total_clicks 
-                                            FROM users u 
-                                            LEFT JOIN short_links sl ON u.id = sl.user_id 
-                                            GROUP BY u.id 
-                                            ORDER BY u.created_at DESC");
-                        $users = $stmt->fetchAll();
-                    ?>
-                    
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Username</th>
-                                <th>Email</th>
-                                <th style="text-align: right;">Links</th>
-                                <th style="text-align: right;">Clicks</th>
-                                <th style="text-align: right;">Earnings</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($users as $u): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($u['username']) ?></td>
-                                <td><?= htmlspecialchars($u['email']) ?></td>
-                                <td style="text-align: right;"><?= number_format($u['link_count']) ?></td>
-                                <td style="text-align: right;"><?= number_format($u['total_clicks'] ?? 0) ?></td>
-                                <td style="text-align: right;">$<?= number_format($u['earnings'], 2) ?></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                    <?php } catch (Exception $e) {
-                        error_log("Users Query Error: " . $e->getMessage());
-                        echo '<p style="color: #dc2626;">Error loading users data.</p>';
-                    } ?>
+                <!-- Recent Users -->
+                <div class="list-card">
+                    <div class="list-card-header">
+                        <h3><i class="fas fa-user-plus" style="margin-right: 8px;"></i>Recent Users</h3>
+                        <a href="users.php">View All →</a>
+                    </div>
+                    <?php if (empty($recent_users)): ?>
+                        <div class="empty-state">
+                            <i class="fas fa-inbox"></i>
+                            <p>No users yet</p>
+                        </div>
+                    <?php else: ?>
+                        <?php foreach ($recent_users as $user): ?>
+                            <div class="list-item">
+                                <div class="list-item-content">
+                                    <div class="list-item-title"><?php echo htmlspecialchars($user['username']); ?></div>
+                                    <div class="list-item-subtitle"><?php echo htmlspecialchars($user['email']); ?></div>
+                                </div>
+                                <div class="list-item-meta">
+                                    <?php echo $user['is_admin'] ? '<span class="badge badge-danger">Admin</span>' : '<span class="badge badge-success">User</span>'; ?><br>
+                                    <small><?php echo timeago($user['created_at']); ?></small>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    <div class="action-buttons">
+                        <a href="users.php" class="btn btn-primary"><i class="fas fa-users"></i> Manage Users</a>
+                    </div>
                 </div>
+            </div>
+        </div>
 
-            <?php elseif ($page === 'links'): ?>
-                <div class="card">
-                    <h2>🔗 Recent Links</h2>
-                    
-                    <?php
-                    try {
-                        $stmt = $db->query("SELECT sl.*, u.username 
-                                            FROM short_links sl 
-                                            JOIN users u ON sl.user_id = u.id 
-                                            ORDER BY sl.created_at DESC 
-                                            LIMIT 50");
-                        $links = $stmt->fetchAll();
-                    ?>
-                    
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Short Code</th>
-                                <th>User</th>
-                                <th>Original URL</th>
-                                <th style="text-align: right;">Clicks</th>
-                                <th style="text-align: right;">Earnings</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($links as $link): ?>
-                            <tr>
-                                <td>
-                                    <a href="<?= SITE_URL ?>/<?= htmlspecialchars($link['short_code']) ?>" target="_blank" style="color: #6366f1;">
-                                        <?= htmlspecialchars($link['short_code']) ?>
-                                    </a>
-                                </td>
-                                <td><?= htmlspecialchars($link['username']) ?></td>
-                                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                    <?= htmlspecialchars($link['original_url']) ?>
-                                </td>
-                                <td style="text-align: right;"><?= number_format($link['clicks']) ?></td>
-                                <td style="text-align: right;">$<?= number_format($link['earnings'], 2) ?></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                    <?php } catch (Exception $e) {
-                        error_log("Links Query Error: " . $e->getMessage());
-                        echo '<p style="color: #dc2626;">Error loading links data.</p>';
-                    } ?>
+        <!-- Quick Actions -->
+        <div class="section">
+            <h2 class="section-title">
+                <i class="fas fa-bolt"></i>
+                Quick Actions
+            </h2>
+            <div class="list-card">
+                <div class="action-buttons" style="justify-content: flex-start; flex-wrap: wrap; gap: 15px; padding: 20px;">
+                    <a href="settings.php?tab=analytics" class="btn btn-primary">
+                        <i class="fas fa-chart-line"></i> Google Analytics
+                    </a>
+                    <a href="settings.php?tab=google_oauth" class="btn btn-primary">
+                        <i class="fab fa-google"></i> Google OAuth
+                    </a>
+                    <a href="settings.php?tab=ads" class="btn btn-primary">
+                        <i class="fas fa-ad"></i> Ad Networks
+                    </a>
+                    <a href="settings.php?tab=scanning" class="btn btn-primary">
+                        <i class="fas fa-shield-alt"></i> Link Scanning
+                    </a>
+                    <a href="settings.php?tab=announce" class="btn btn-primary">
+                        <i class="fas fa-bullhorn"></i> Announcements
+                    </a>
+                    <a href="settings.php" class="btn btn-secondary">
+                        <i class="fas fa-cog"></i> All Settings
+                    </a>
                 </div>
-            <?php endif; ?>
+            </div>
         </div>
     </div>
 </body>
