@@ -5,12 +5,59 @@
  * Get all settings from database
  */
 function getSettings($db) {
-    $stmt = $db->query("SELECT setting_key, setting_value FROM settings");
-    $settings = [];
-    while ($row = $stmt->fetch()) {
-        $settings[$row['setting_key']] = $row['setting_value'];
+    try {
+        $stmt = $db->query("SELECT setting_key, setting_value FROM settings");
+        $settings = [];
+        while ($row = $stmt->fetch()) {
+            $settings[$row['setting_key']] = $row['setting_value'];
+        }
+        return $settings;
+    } catch (Exception $e) {
+        error_log("getSettings Error: " . $e->getMessage());
+        return [];
     }
-    return $settings;
+}
+
+/**
+ * Get total number of links
+ */
+function getTotalLinks($db) {
+    try {
+        $stmt = $db->query("SELECT COUNT(*) as count FROM short_links");
+        $result = $stmt->fetch();
+        return $result['count'] ?? 0;
+    } catch (Exception $e) {
+        error_log("getTotalLinks Error: " . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
+ * Get total number of clicks
+ */
+function getTotalClicks($db) {
+    try {
+        $stmt = $db->query("SELECT SUM(clicks) as total FROM short_links");
+        $result = $stmt->fetch();
+        return $result['total'] ?? 0;
+    } catch (Exception $e) {
+        error_log("getTotalClicks Error: " . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
+ * Get total number of users
+ */
+function getTotalUsers($db) {
+    try {
+        $stmt = $db->query("SELECT COUNT(*) as count FROM users");
+        $result = $stmt->fetch();
+        return $result['count'] ?? 0;
+    } catch (Exception $e) {
+        error_log("getTotalUsers Error: " . $e->getMessage());
+        return 0;
+    }
 }
 
 /**
@@ -52,16 +99,22 @@ function isValidUrl($url) {
 }
 
 /**
- * Send email using SMTP
+ * Send email using SMTP (requires PHPMailer)
  */
 function sendEmail($to, $subject, $message, $settings = []) {
     if (empty($settings['smtp_host']) || empty($settings['smtp_user'])) {
         return false;
     }
     
-    require_once 'phpmailer/PHPMailer.php';
-    require_once 'phpmailer/SMTP.php';
-    require_once 'phpmailer/Exception.php';
+    // Check if PHPMailer exists
+    if (!file_exists('includes/phpmailer/PHPMailer.php')) {
+        error_log("PHPMailer not installed");
+        return false;
+    }
+    
+    require_once 'includes/phpmailer/PHPMailer.php';
+    require_once 'includes/phpmailer/SMTP.php';
+    require_once 'includes/phpmailer/Exception.php';
     
     $mail = new PHPMailerPHPMailerPHPMailer(true);
     
@@ -139,10 +192,18 @@ function getUserEarnings($db, $user_id) {
  */
 function logActivity($db, $user_id, $action, $details = '') {
     try {
+        // Check if activity_log table exists
+        $stmt = $db->query("SHOW TABLES LIKE 'activity_log'");
+        if (!$stmt->fetch()) {
+            return false; // Table doesn't exist, skip logging
+        }
+        
         $stmt = $db->prepare("INSERT INTO activity_log (user_id, action, details, created_at) VALUES (?, ?, ?, NOW())");
         $stmt->execute([$user_id, $action, $details]);
+        return true;
     } catch (Exception $e) {
         error_log("Activity Log Error: " . $e->getMessage());
+        return false;
     }
 }
 
@@ -227,14 +288,19 @@ function cleanOldAnalytics($db, $days = 90) {
  * Get top links
  */
 function getTopLinks($db, $user_id = null, $limit = 10) {
-    if ($user_id) {
-        $stmt = $db->prepare("SELECT * FROM short_links WHERE user_id = ? ORDER BY clicks DESC LIMIT ?");
-        $stmt->execute([$user_id, $limit]);
-    } else {
-        $stmt = $db->prepare("SELECT * FROM short_links ORDER BY clicks DESC LIMIT ?");
-        $stmt->execute([$limit]);
+    try {
+        if ($user_id) {
+            $stmt = $db->prepare("SELECT * FROM short_links WHERE user_id = ? ORDER BY clicks DESC LIMIT ?");
+            $stmt->execute([$user_id, $limit]);
+        } else {
+            $stmt = $db->prepare("SELECT * FROM short_links ORDER BY clicks DESC LIMIT ?");
+            $stmt->execute([$limit]);
+        }
+        return $stmt->fetchAll();
+    } catch (Exception $e) {
+        error_log("getTopLinks Error: " . $e->getMessage());
+        return [];
     }
-    return $stmt->fetchAll();
 }
 
 /**
@@ -263,17 +329,43 @@ function exportLinksToCSV($db, $user_id) {
  * Check rate limit
  */
 function checkRateLimit($db, $user_id, $action, $max_requests = 10, $time_window = 60) {
-    $stmt = $db->prepare("SELECT COUNT(*) as count FROM rate_limits WHERE user_id = ? AND action = ? AND created_at > DATE_SUB(NOW(), INTERVAL ? SECOND)");
-    $stmt->execute([$user_id, $action, $time_window]);
-    $result = $stmt->fetch();
-    
-    if ($result['count'] >= $max_requests) {
-        return false;
+    try {
+        // Check if rate_limits table exists
+        $stmt = $db->query("SHOW TABLES LIKE 'rate_limits'");
+        if (!$stmt->fetch()) {
+            return true; // Table doesn't exist, allow request
+        }
+        
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM rate_limits WHERE user_id = ? AND action = ? AND created_at > DATE_SUB(NOW(), INTERVAL ? SECOND)");
+        $stmt->execute([$user_id, $action, $time_window]);
+        $result = $stmt->fetch();
+        
+        if ($result['count'] >= $max_requests) {
+            return false;
+        }
+        
+        $stmt = $db->prepare("INSERT INTO rate_limits (user_id, action, created_at) VALUES (?, ?, NOW())");
+        $stmt->execute([$user_id, $action]);
+        
+        return true;
+    } catch (Exception $e) {
+        error_log("checkRateLimit Error: " . $e->getMessage());
+        return true; // Allow on error
     }
-    
-    $stmt = $db->prepare("INSERT INTO rate_limits (user_id, action, created_at) VALUES (?, ?, NOW())");
-    $stmt->execute([$user_id, $action]);
-    
-    return true;
+}
+
+/**
+ * Adjust color brightness
+ */
+function adjustColor($hex, $steps) {
+    $steps = max(-255, min(255, $steps));
+    $hex = str_replace('#', '', $hex);
+    $r = hexdec(substr($hex, 0, 2));
+    $g = hexdec(substr($hex, 2, 2));
+    $b = hexdec(substr($hex, 4, 2));
+    $r = max(0, min(255, $r + $steps));
+    $g = max(0, min(255, $g + $steps));
+    $b = max(0, min(255, $b + $steps));
+    return '#' . str_pad(dechex($r), 2, '0', STR_PAD_LEFT) . str_pad(dechex($g), 2, '0', STR_PAD_LEFT) . str_pad(dechex($b), 2, '0', STR_PAD_LEFT);
 }
 ?>
