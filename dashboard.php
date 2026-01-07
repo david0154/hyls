@@ -1,4 +1,8 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
 session_start();
 require_once 'config.php';
 require_once 'includes/db.php';
@@ -9,17 +13,42 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$db = new Database();
-$user_id = $_SESSION['user_id'];
+try {
+    $db = new Database();
+    $user_id = $_SESSION['user_id'];
 
-$user = getUserById($db, $user_id);
-$short_links = getUserLinks($db, $user_id);
-$bio_link = getUserBioLink($db, $user_id);
-$settings = getSettings($db);
+    // Get user data
+    $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch();
+    
+    if (!$user) {
+        session_destroy();
+        header('Location: index.php');
+        exit;
+    }
 
-$total_clicks = 0;
-foreach ($short_links as $link) {
-    $total_clicks += $link['clicks'];
+    // Get user's short links
+    $stmt = $db->prepare("SELECT * FROM short_links WHERE user_id = ? ORDER BY created_at DESC");
+    $stmt->execute([$user_id]);
+    $short_links = $stmt->fetchAll();
+
+    // Get user's bio link
+    $stmt = $db->prepare("SELECT * FROM bio_links WHERE user_id = ? LIMIT 1");
+    $stmt->execute([$user_id]);
+    $bio_link = $stmt->fetch();
+
+    // Get settings
+    $settings = getSettings($db);
+    
+    // Calculate total clicks
+    $total_clicks = 0;
+    foreach ($short_links as $link) {
+        $total_clicks += $link['clicks'];
+    }
+} catch (Exception $e) {
+    error_log("Dashboard Error: " . $e->getMessage());
+    die("An error occurred. Please try again later.");
 }
 ?>
 <!DOCTYPE html>
@@ -82,7 +111,13 @@ foreach ($short_links as $link) {
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            object-fit: cover;
+            background: #6366f1;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
         }
         .user-name {
             font-weight: 600;
@@ -99,6 +134,18 @@ foreach ($short_links as $link) {
         }
         .btn-logout:hover {
             background: #dc2626;
+        }
+        .btn-admin {
+            padding: 8px 16px;
+            background: #6366f1;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .btn-admin:hover {
+            background: #4f46e5;
         }
         .main-content {
             padding: 40px 20px;
@@ -237,6 +284,8 @@ foreach ($short_links as $link) {
             font-size: 14px;
             font-weight: 600;
             transition: all 0.3s;
+            border: none;
+            cursor: pointer;
         }
         .btn-copy {
             background: #10b981;
@@ -256,6 +305,8 @@ foreach ($short_links as $link) {
             text-align: center;
             padding: 60px 20px;
             color: #64748b;
+            background: white;
+            border-radius: 12px;
         }
         .empty-icon {
             font-size: 64px;
@@ -315,6 +366,15 @@ foreach ($short_links as $link) {
             gap: 12px;
             justify-content: flex-end;
         }
+        @media (max-width: 768px) {
+            .welcome-section h1 {
+                font-size: 24px;
+            }
+            .link-card {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
     </style>
 </head>
 <body>
@@ -324,11 +384,11 @@ foreach ($short_links as $link) {
                 <a href="dashboard.php" class="logo">🔗 HYLS</a>
                 <div class="nav-user">
                     <div class="user-info">
-                        <img src="<?= htmlspecialchars($user['profile_picture'] ?? 'https://ui-avatars.com/api/?name=' . urlencode($user['username'])) ?>" alt="Profile" class="user-avatar">
+                        <div class="user-avatar"><?= strtoupper(substr($user['username'], 0, 1)) ?></div>
                         <span class="user-name"><?= htmlspecialchars($user['username']) ?></span>
                     </div>
                     <?php if ($user['is_admin']): ?>
-                    <a href="admin/" class="btn btn-small btn-secondary">Admin</a>
+                    <a href="admin/" class="btn-admin">👑 Admin</a>
                     <?php endif; ?>
                     <a href="logout.php" class="btn-logout">Logout</a>
                 </div>
@@ -358,10 +418,15 @@ foreach ($short_links as $link) {
                 <div class="stat-value"><?= $bio_link ? 'Active' : 'Not Set' ?></div>
                 <div class="stat-label">Bio Link Status</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-icon">💰</div>
+                <div class="stat-value">$<?= number_format($user['earnings'] ?? 0, 2) ?></div>
+                <div class="stat-label">Total Earnings</div>
+            </div>
         </div>
 
         <div class="action-buttons">
-            <a href="#" onclick="openModal('createLinkModal')" class="btn btn-primary">➕ Create Short Link</a>
+            <a href="#" onclick="openModal('createLinkModal'); return false;" class="btn btn-primary">➕ Create Short Link</a>
             <a href="biolink.php" class="btn btn-secondary">✏️ Edit Bio Link</a>
             <?php if ($bio_link): ?>
             <a href="<?= SITE_URL ?>/bio/<?= htmlspecialchars($user['username']) ?>" target="_blank" class="btn btn-secondary">👁️ View Bio Page</a>
@@ -391,9 +456,13 @@ foreach ($short_links as $link) {
                         <div class="link-stat-value"><?= number_format($link['clicks']) ?></div>
                         <div class="link-stat-label">Clicks</div>
                     </div>
+                    <div class="link-stat-item">
+                        <div class="link-stat-value">$<?= number_format($link['earnings'] ?? 0, 3) ?></div>
+                        <div class="link-stat-label">Earned</div>
+                    </div>
                 </div>
                 <div class="link-actions">
-                    <a href="#" onclick="copyLink('<?= SITE_URL ?>/<?= htmlspecialchars($link['short_code']) ?>')" class="btn-small btn-copy">Copy</a>
+                    <button onclick="copyLink('<?= SITE_URL ?>/<?= htmlspecialchars($link['short_code']) ?>')" class="btn-small btn-copy">Copy</button>
                     <a href="delete_link.php?id=<?= $link['id'] ?>" onclick="return confirm('Delete this link?')" class="btn-small btn-delete">Delete</a>
                 </div>
             </div>
@@ -437,10 +506,19 @@ foreach ($short_links as $link) {
         
         function copyLink(url) {
             navigator.clipboard.writeText(url).then(() => {
-                alert('Link copied to clipboard!');
+                alert('✅ Link copied to clipboard!');
+            }).catch(() => {
+                prompt('Copy this link:', url);
             });
             return false;
         }
+        
+        // Close modal when clicking outside
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('modal')) {
+                e.target.classList.remove('active');
+            }
+        });
     </script>
 </body>
 </html>
