@@ -1,18 +1,15 @@
 <?php
 // auth.php - HypeChats OAuth callback handler
+// Uses official HypeChats API as per documentation
 session_start();
 require_once 'config.php';
 require_once 'includes/db.php';
 
 $code = $_GET['code'] ?? '';
 $error = $_GET['error'] ?? '';
-$error_description = $_GET['error_description'] ?? '';
 
 if ($error) {
     $_SESSION['error'] = 'OAuth failed: ' . htmlspecialchars($error);
-    if (!empty($error_description)) {
-        $_SESSION['error'] .= ' - ' . htmlspecialchars($error_description);
-    }
     header('Location: login.php');
     exit;
 }
@@ -24,140 +21,125 @@ if (empty($code)) {
 }
 
 try {
-    // Exchange code for access token
-    $token_url = 'https://hypechats.com/api/oauth/token';
-    $token_data = [
-        'grant_type' => 'authorization_code',
-        'client_id' => APP_ID,
-        'client_secret' => APP_SECRET,
-        'code' => $code,
-        'redirect_uri' => SITE_URL . '/auth.php'
-    ];
+    // Step 1: Get Access Token from HypeChats
+    // Using official endpoint: https://hypechats.com/authorize
+    $token_url = "https://hypechats.com/authorize?app_id=" . urlencode(APP_ID) . 
+                 "&app_secret=" . urlencode(APP_SECRET) . 
+                 "&code=" . urlencode($code);
     
-    $ch = curl_init($token_url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($token_data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    // Use file_get_contents as per HypeChats documentation
+    $response = @file_get_contents($token_url);
     
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curl_error = curl_error($ch);
-    curl_close($ch);
-    
-    if (!empty($curl_error)) {
-        throw new Exception('CURL Error: ' . $curl_error);
-    }
-    
-    if ($http_code !== 200) {
-        error_log("HypeChats Token Error (Code: $http_code): " . $response);
-        throw new Exception('Failed to get access token. HTTP Status: ' . $http_code);
+    if ($response === false) {
+        throw new Exception('Failed to connect to HypeChats API. Please check your internet connection.');
     }
     
     $token_result = json_decode($response, true);
+    
     if (json_last_error() !== JSON_ERROR_NONE) {
-        throw new Exception('Invalid JSON response from token endpoint');
+        throw new Exception('Invalid response from HypeChats API');
     }
     
-    $access_token = $token_result['access_token'] ?? '';
-    if (empty($access_token)) {
-        error_log("HypeChats Token Response: " . $response);
-        throw new Exception('Invalid access token received');
+    if (empty($token_result['access_token'])) {
+        error_log("HypeChats Token Error: " . json_encode($token_result));
+        throw new Exception('Failed to obtain access token. Please try again.');
     }
     
-    // Get user info from HypeChats
-    $user_url = 'https://hypechats.com/api/user/me';
-    $ch = curl_init($user_url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Accept: application/json',
-        'Authorization: Bearer ' . $access_token
-    ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    $access_token = $token_result['access_token'];
     
-    $user_response = curl_exec($ch);
-    $user_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $user_curl_error = curl_error($ch);
-    curl_close($ch);
+    // Step 2: Get User Data from HypeChats
+    // Using official endpoint: https://hypechats.com/app_api
+    $user_url = "https://hypechats.com/app_api?access_token=" . urlencode($access_token) . 
+                "&type=get_user_data";
     
-    if (!empty($user_curl_error)) {
-        throw new Exception('CURL Error fetching user: ' . $user_curl_error);
+    $user_response = @file_get_contents($user_url);
+    
+    if ($user_response === false) {
+        throw new Exception('Failed to retrieve user data from HypeChats');
     }
     
-    if ($user_http_code !== 200) {
-        error_log("HypeChats User Error (Code: $user_http_code): " . $user_response);
-        throw new Exception('Failed to get user information. HTTP Status: ' . $user_http_code);
-    }
+    $user_result = json_decode($user_response, true);
     
-    $hype_user = json_decode($user_response, true);
     if (json_last_error() !== JSON_ERROR_NONE) {
-        throw new Exception('Invalid JSON response from user endpoint');
+        throw new Exception('Invalid user data response from HypeChats');
     }
     
-    if (empty($hype_user['id'])) {
-        error_log("Invalid HypeChats User Response: " . $user_response);
-        throw new Exception('Invalid user data received from HypeChats');
+    if (empty($user_result['user_data']) || empty($user_result['user_data']['id'])) {
+        error_log("HypeChats User Error: " . json_encode($user_result));
+        throw new Exception('Failed to retrieve user information');
     }
     
+    $hype_user = $user_result['user_data'];
+    
+    // Initialize Database
     $db = new Database();
     
-    // Check if user exists
+    // Step 3: Check if user exists in our database
     $stmt = $db->prepare("SELECT * FROM users WHERE hype_id = ?");
     if (!$stmt) {
-        throw new Exception('Database prepare failed');
+        throw new Exception('Database error: Failed to prepare statement');
     }
     
     $stmt->execute([$hype_user['id']]);
     $user = $stmt->fetch();
     
     if ($user) {
-        // Update existing user
-        $update_stmt = $db->prepare("UPDATE users SET access_token = ?, first_name = ?, last_name = ?, profile_picture = ?, updated_at = NOW() WHERE hype_id = ?");
+        // User exists - Update their data
+        $update_stmt = $db->prepare("UPDATE users SET 
+            access_token = ?, 
+            first_name = ?, 
+            last_name = ?, 
+            profile_picture = ?,
+            updated_at = NOW() 
+            WHERE hype_id = ?");
+        
         if (!$update_stmt) {
-            throw new Exception('Update statement failed');
+            throw new Exception('Database error: Failed to prepare update statement');
         }
         
         $update_stmt->execute([
             $access_token,
             $hype_user['first_name'] ?? '',
             $hype_user['last_name'] ?? '',
-            $hype_user['avatar'] ?? '',
+            $hype_user['profile_picture'] ?? '',
             $hype_user['id']
         ]);
         
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['username'] = $user['username'];
-        $_SESSION['profile_picture'] = $hype_user['avatar'] ?? $user['profile_picture'];
-        $_SESSION['success'] = 'Welcome back, ' . htmlspecialchars($user['first_name'] ?? $user['username']) . '!';
-    } else {
-        // Create new user
-        $username = $hype_user['username'] ?? 'user' . uniqid();
-        $email = $hype_user['email'] ?? $username . '@hypechats.local';
+        $_SESSION['profile_picture'] = $hype_user['profile_picture'] ?? $user['profile_picture'];
+        $_SESSION['success'] = 'Welcome back, ' . htmlspecialchars($hype_user['first_name'] ?? $user['username']) . '!';
         
-        // Ensure unique username
+        error_log("User login: " . $user['username'] . " (ID: " . $user['id'] . ")");
+    } else {
+        // New user - Create account
+        $username = $hype_user['username'] ?? 'user' . uniqid();
+        $email = 'user' . uniqid() . '@hypechats.local'; // Generate unique email
+        
+        // Ensure username is unique
         $original_username = $username;
         $counter = 1;
         while (true) {
             $check_stmt = $db->prepare("SELECT id FROM users WHERE username = ?");
             if (!$check_stmt) {
-                throw new Exception('Check username statement failed');
+                throw new Exception('Database error: Failed to check username');
             }
             
             $check_stmt->execute([$username]);
             if (!$check_stmt->fetch()) {
-                break;
+                break; // Username is unique
             }
             $username = $original_username . $counter;
             $counter++;
         }
         
         // Insert new user
-        $insert_stmt = $db->prepare("INSERT INTO users (hype_id, username, email, first_name, last_name, profile_picture, access_token, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
+        $insert_stmt = $db->prepare("INSERT INTO users 
+            (hype_id, username, email, first_name, last_name, profile_picture, access_token, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
+        
         if (!$insert_stmt) {
-            throw new Exception('Insert statement failed');
+            throw new Exception('Database error: Failed to prepare insert statement');
         }
         
         $insert_stmt->execute([
@@ -166,35 +148,46 @@ try {
             $email,
             $hype_user['first_name'] ?? '',
             $hype_user['last_name'] ?? '',
-            $hype_user['avatar'] ?? '',
+            $hype_user['profile_picture'] ?? '',
             $access_token
         ]);
         
         $user_id = $db->lastInsertId();
         
-        // Create default bio link
-        $bio_stmt = $db->prepare("INSERT INTO bio_links (user_id, username, display_name, theme_color, created_at) VALUES (?, ?, ?, ?, NOW())");
+        // Create default bio link for new users
+        $bio_stmt = $db->prepare("INSERT INTO bio_links 
+            (user_id, username, display_name, theme_color, created_at) 
+            VALUES (?, ?, ?, ?, NOW())");
+        
         if ($bio_stmt) {
+            $display_name = trim(($hype_user['first_name'] ?? '') . ' ' . ($hype_user['last_name'] ?? ''));
+            if (empty($display_name)) {
+                $display_name = $username;
+            }
+            
             $bio_stmt->execute([
                 $user_id,
                 $username,
-                $hype_user['first_name'] . ' ' . ($hype_user['last_name'] ?? '') ?? $username,
-                '#6366f1'
+                $display_name,
+                '#6366f1' // Default theme color
             ]);
         }
         
         $_SESSION['user_id'] = $user_id;
         $_SESSION['username'] = $username;
-        $_SESSION['profile_picture'] = $hype_user['avatar'] ?? '';
-        $_SESSION['success'] = 'Welcome to HYLS! Your account has been created successfully.';
+        $_SESSION['profile_picture'] = $hype_user['profile_picture'] ?? '';
+        $_SESSION['success'] = 'Welcome to HYLS! Your account has been created successfully. Your bio page is ready to customize.';
+        
+        error_log("New user created: " . $username . " (ID: " . $user_id . ") via HypeChats OAuth");
     }
     
+    // Redirect to dashboard on success
     header('Location: dashboard.php');
     exit;
     
 } catch (Exception $e) {
-    $_SESSION['error'] = 'Authentication Error: ' . $e->getMessage();
-    error_log('Auth.php Error: ' . $e->getMessage());
+    $_SESSION['error'] = htmlspecialchars($e->getMessage());
+    error_log('Auth.php Error: ' . $e->getMessage() . ' | Code: ' . $code);
     header('Location: login.php');
     exit;
 }
