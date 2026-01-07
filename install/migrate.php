@@ -21,6 +21,36 @@ if (file_exists(__DIR__ . '/../config.php')) {
         
         echo "<br><strong>Running Database Migrations:</strong><br>";
         
+        // Migration 0: Add created_at column if missing
+        try {
+            $stmt = $db->query("SHOW COLUMNS FROM users LIKE 'created_at'");
+            if (!$stmt->fetch()) {
+                $db->query("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP AFTER is_admin");
+                $migrations_run[] = 'Added created_at column to users table';
+                echo "✅ Added created_at column<br>";
+            } else {
+                echo "ℹ️ created_at column already exists<br>";
+            }
+        } catch (Exception $e) {
+            $migrations_failed[] = 'created_at column: ' . $e->getMessage();
+            echo "❌ Failed to add created_at column: " . $e->getMessage() . "<br>";
+        }
+        
+        // Migration 0.5: Add updated_at column if missing
+        try {
+            $stmt = $db->query("SHOW COLUMNS FROM users LIKE 'updated_at'");
+            if (!$stmt->fetch()) {
+                $db->query("ALTER TABLE users ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
+                $migrations_run[] = 'Added updated_at column to users table';
+                echo "✅ Added updated_at column<br>";
+            } else {
+                echo "ℹ️ updated_at column already exists<br>";
+            }
+        } catch (Exception $e) {
+            $migrations_failed[] = 'updated_at column: ' . $e->getMessage();
+            echo "❌ Failed to add updated_at column: " . $e->getMessage() . "<br>";
+        }
+        
         // Migration 1: Add google_id column to users table
         try {
             $stmt = $db->query("SHOW COLUMNS FROM users LIKE 'google_id'");
@@ -71,7 +101,14 @@ if (file_exists(__DIR__ . '/../config.php')) {
         try {
             $stmt = $db->query("SHOW COLUMNS FROM users LIKE 'last_login'");
             if (!$stmt->fetch()) {
-                $db->query("ALTER TABLE users ADD COLUMN last_login DATETIME NULL AFTER updated_at");
+                // Check if updated_at exists now
+                $stmt2 = $db->query("SHOW COLUMNS FROM users LIKE 'updated_at'");
+                if ($stmt2->fetch()) {
+                    $db->query("ALTER TABLE users ADD COLUMN last_login DATETIME NULL AFTER updated_at");
+                } else {
+                    // Add after created_at if updated_at doesn't exist
+                    $db->query("ALTER TABLE users ADD COLUMN last_login DATETIME NULL AFTER created_at");
+                }
                 $migrations_run[] = 'Added last_login column to users table';
                 echo "✅ Added last_login column<br>";
             } else {
@@ -108,6 +145,21 @@ if (file_exists(__DIR__ . '/../config.php')) {
             echo "❌ Failed to add hypechats_id column: " . $e->getMessage() . "<br>";
         }
         
+        // Migration 7: Ensure is_admin column exists
+        try {
+            $stmt = $db->query("SHOW COLUMNS FROM users LIKE 'is_admin'");
+            if (!$stmt->fetch()) {
+                $db->query("ALTER TABLE users ADD COLUMN is_admin TINYINT(1) DEFAULT 0 AFTER email_verified");
+                $migrations_run[] = 'Added is_admin column to users table';
+                echo "✅ Added is_admin column<br>";
+            } else {
+                echo "ℹ️ is_admin column already exists<br>";
+            }
+        } catch (Exception $e) {
+            $migrations_failed[] = 'is_admin column: ' . $e->getMessage();
+            echo "❌ Failed to add is_admin column: " . $e->getMessage() . "<br>";
+        }
+        
         // Log migrations
         if (!empty($migrations_run)) {
             error_log("Migrations completed: " . implode(', ', $migrations_run));
@@ -119,6 +171,12 @@ if (file_exists(__DIR__ . '/../config.php')) {
         echo "<br><strong>Migration Summary:</strong><br>";
         echo "✅ Successful: " . count($migrations_run) . "<br>";
         echo "❌ Failed: " . count($migrations_failed) . "<br>";
+        
+        if (count($migrations_failed) === 0) {
+            echo "<br><strong style='color: #22c55e;'>🎉 All migrations completed successfully!</strong><br>";
+        } else {
+            echo "<br><strong style='color: #f59e0b;'>⚠️ Some migrations failed. Check errors above.</strong><br>";
+        }
         
     } catch (Exception $e) {
         echo "❌ Migration error: " . $e->getMessage() . "<br>";
