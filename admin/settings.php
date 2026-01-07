@@ -9,6 +9,16 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_admin']) || !$_SESSION[
     exit;
 }
 
+// Define sanitize function if it doesn't exist
+if (!function_exists('sanitize')) {
+    function sanitize($data) {
+        if (is_array($data)) {
+            return array_map('sanitize', $data);
+        }
+        return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+    }
+}
+
 $db = new Database();
 $current_tab = $_GET['tab'] ?? 'general';
 $message = '';
@@ -33,9 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     try {
         switch ($action) {
             case 'save_general':
-                $site_name = sanitize($_POST['site_name']);
-                $site_keywords = sanitize($_POST['site_keywords']);
-                $theme_color = sanitize($_POST['theme_color']);
+                $site_name = sanitize($_POST['site_name'] ?? '');
+                $site_keywords = sanitize($_POST['site_keywords'] ?? '');
+                $theme_color = sanitize($_POST['theme_color'] ?? '');
                 
                 save_setting($db, 'site_name', $site_name);
                 save_setting($db, 'site_keywords', $site_keywords);
@@ -46,9 +56,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
             case 'save_google_analytics':
                 $ga_enabled = isset($_POST['ga_enabled']) ? 1 : 0;
-                $ga_tracking_id = sanitize($_POST['ga_tracking_id']);
-                $ga_api_key = sanitize($_POST['ga_api_key']);
-                $ga_view_id = sanitize($_POST['ga_view_id']);
+                $ga_tracking_id = sanitize($_POST['ga_tracking_id'] ?? '');
+                $ga_api_key = sanitize($_POST['ga_api_key'] ?? '');
+                $ga_view_id = sanitize($_POST['ga_view_id'] ?? '');
                 
                 save_setting($db, 'ga_enabled', $ga_enabled);
                 save_setting($db, 'ga_tracking_id', $ga_tracking_id);
@@ -60,8 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
             case 'save_google_oauth':
                 $google_oauth_enabled = isset($_POST['google_oauth_enabled']) ? 1 : 0;
-                $google_client_id = sanitize($_POST['google_client_id']);
-                $google_client_secret = sanitize($_POST['google_client_secret']);
+                $google_client_id = sanitize($_POST['google_client_id'] ?? '');
+                $google_client_secret = sanitize($_POST['google_client_secret'] ?? '');
                 
                 save_setting($db, 'google_oauth_enabled', $google_oauth_enabled);
                 save_setting($db, 'google_client_id', $google_client_id);
@@ -72,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
             case 'save_ads':
                 $ads_enabled = isset($_POST['ads_enabled']) ? 1 : 0;
-                $ads_duration = (int)$_POST['ads_duration'];
+                $ads_duration = (int)($_POST['ads_duration'] ?? 5);
                 $google_ads_enabled = isset($_POST['google_ads_enabled']) ? 1 : 0;
                 $google_ads_code = $_POST['google_ads_code'] ?? '';
                 $juicy_ads_enabled = isset($_POST['juicy_ads_enabled']) ? 1 : 0;
@@ -94,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
             case 'save_link_scanning':
                 $link_scanning_enabled = isset($_POST['link_scanning_enabled']) ? 1 : 0;
-                $virustotal_api_key = sanitize($_POST['virustotal_api_key']);
+                $virustotal_api_key = sanitize($_POST['virustotal_api_key'] ?? '');
                 $block_malicious = isset($_POST['block_malicious']) ? 1 : 0;
                 
                 save_setting($db, 'link_scanning_enabled', $link_scanning_enabled);
@@ -107,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             case 'save_announcement':
                 $announcement_enabled = isset($_POST['announcement_enabled']) ? 1 : 0;
                 $announcement_text = $_POST['announcement_text'] ?? '';
-                $announcement_type = sanitize($_POST['announcement_type']);
+                $announcement_type = sanitize($_POST['announcement_type'] ?? 'info');
                 
                 save_setting($db, 'announcement_enabled', $announcement_enabled);
                 save_setting($db, 'announcement_text', $announcement_text);
@@ -123,10 +133,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 }
 
 // Get all settings
-$settings_result = $db->query("SELECT setting_key, setting_value FROM settings");
-$settings = [];
-while ($row = $settings_result->fetch(PDO::FETCH_ASSOC)) {
-    $settings[$row['setting_key']] = $row['setting_value'];
+try {
+    $settings_result = $db->query("SELECT setting_key, setting_value FROM settings");
+    $settings = [];
+    if ($settings_result) {
+        while ($row = $settings_result->fetch(PDO::FETCH_ASSOC)) {
+            $settings[$row['setting_key']] = $row['setting_value'];
+        }
+    }
+} catch (Exception $e) {
+    error_log("Error loading settings: " . $e->getMessage());
+    $settings = [];
 }
 
 // Helper function to get setting value
