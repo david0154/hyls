@@ -445,7 +445,7 @@ $recent_users = $db->query("SELECT * FROM users ORDER BY created_at DESC LIMIT 5
 
         <!-- Header -->
         <div class="header">
-            <h1>📄 Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?>!</h1>
+            <h1>📋 Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?>!</h1>
             <p>Here's your admin dashboard overview</p>
         </div>
 
@@ -568,19 +568,28 @@ $recent_users = $db->query("SELECT * FROM users ORDER BY created_at DESC LIMIT 5
             </h2>
             <div class="list-card">
                 <div class="action-buttons" style="justify-content: flex-start; flex-wrap: wrap; gap: 15px; padding: 20px;">
-                    <a href="settings.php?tab=analytics" class="btn btn-primary">
+                    <a href="settings.php?tab=ads" class="btn btn-primary">
+                        <i class="fas fa-ad"></i> Ad Networks (Time-based Ads)
+                    </a>
+                    <a href="promotion.php" class="btn btn-primary">
+                        <i class="fas fa-bullhorn"></i> Promotion Settings
+                    </a>
+                    <a href="smtp-settings.php" class="btn btn-primary">
+                        <i class="fas fa-envelope"></i> SMTP Mail Settings
+                    </a>
+                    <a href="github-update.php" class="btn btn-primary">
+                        <i class="fab fa-github"></i> GitHub Auto-Update
+                    </a>
+                    <a href="settings.php?tab=analytics" class="btn btn-secondary">
                         <i class="fas fa-chart-line"></i> Google Analytics
                     </a>
-                    <a href="settings.php?tab=google_oauth" class="btn btn-primary">
+                    <a href="settings.php?tab=google_oauth" class="btn btn-secondary">
                         <i class="fab fa-google"></i> Google OAuth
                     </a>
-                    <a href="settings.php?tab=ads" class="btn btn-primary">
-                        <i class="fas fa-ad"></i> Ad Networks
-                    </a>
-                    <a href="settings.php?tab=scanning" class="btn btn-primary">
+                    <a href="settings.php?tab=scanning" class="btn btn-secondary">
                         <i class="fas fa-shield-alt"></i> Link Scanning
                     </a>
-                    <a href="settings.php?tab=announce" class="btn btn-primary">
+                    <a href="settings.php?tab=announce" class="btn btn-secondary">
                         <i class="fas fa-bullhorn"></i> Announcements
                     </a>
                     <a href="settings.php" class="btn btn-secondary">
