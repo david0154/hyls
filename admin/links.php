@@ -18,20 +18,22 @@ if (isset($_GET['action']) && isset($_GET['link_id'])) {
     
     try {
         switch ($action) {
+            case 'ban':
             case 'block':
-                $stmt = $db->prepare("UPDATE links SET is_blocked = 1, blocked_at = NOW(), blocked_reason = ? WHERE id = ?");
-                $stmt->execute(['Blocked by admin', $link_id]);
+                $stmt = $db->prepare("UPDATE short_links SET is_banned = 1 WHERE id = ?");
+                $stmt->execute([$link_id]);
                 $_SESSION['success'] = 'Link blocked successfully!';
                 break;
                 
+            case 'unban':
             case 'unblock':
-                $stmt = $db->prepare("UPDATE links SET is_blocked = 0, blocked_at = NULL, blocked_reason = NULL WHERE id = ?");
+                $stmt = $db->prepare("UPDATE short_links SET is_banned = 0 WHERE id = ?");
                 $stmt->execute([$link_id]);
                 $_SESSION['success'] = 'Link unblocked successfully!';
                 break;
                 
             case 'delete':
-                $stmt = $db->prepare("DELETE FROM links WHERE id = ?");
+                $stmt = $db->prepare("DELETE FROM short_links WHERE id = ?");
                 $stmt->execute([$link_id]);
                 $_SESSION['success'] = 'Link deleted permanently!';
                 break;
@@ -63,23 +65,23 @@ if ($search) {
 }
 
 if ($filter === 'blocked') {
-    $where[] = "l.is_blocked = 1";
+    $where[] = "l.is_banned = 1";
 } elseif ($filter === 'active') {
-    $where[] = "l.is_blocked = 0";
+    $where[] = "l.is_banned = 0";
 } elseif ($filter === 'expired') {
     $where[] = "l.expires_at IS NOT NULL AND l.expires_at < NOW()";
 }
 
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$stmt = $db->prepare("SELECT COUNT(*) as total FROM links l LEFT JOIN users u ON l.user_id = u.id $where_sql");
+$stmt = $db->prepare("SELECT COUNT(*) as total FROM short_links l LEFT JOIN users u ON l.user_id = u.id $where_sql");
 $stmt->execute($params);
 $total = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 $total_pages = ceil($total / $per_page);
 
 $stmt = $db->prepare("
     SELECT l.*, u.username, u.email
-    FROM links l 
+    FROM short_links l 
     LEFT JOIN users u ON l.user_id = u.id
     $where_sql
     ORDER BY l.created_at DESC 
@@ -95,7 +97,6 @@ $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Link Management - Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/mobile.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; }
@@ -154,16 +155,16 @@ $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <!-- Stats -->
         <div class="stats">
             <?php
-            $stmt = $db->query("SELECT COUNT(*) as total FROM links");
+            $stmt = $db->query("SELECT COUNT(*) as total FROM short_links");
             $total_links = $stmt->fetch()['total'];
             
-            $stmt = $db->query("SELECT COUNT(*) as total FROM links WHERE is_blocked = 1");
+            $stmt = $db->query("SELECT COUNT(*) as total FROM short_links WHERE is_banned = 1");
             $blocked_links = $stmt->fetch()['total'];
             
-            $stmt = $db->query("SELECT SUM(clicks) as total FROM links");
+            $stmt = $db->query("SELECT SUM(clicks) as total FROM short_links");
             $total_clicks = $stmt->fetch()['total'] ?? 0;
             
-            $stmt = $db->query("SELECT COUNT(*) as total FROM links WHERE expires_at IS NOT NULL AND expires_at < NOW()");
+            $stmt = $db->query("SELECT COUNT(*) as total FROM short_links WHERE expires_at IS NOT NULL AND expires_at < NOW()");
             $expired_links = $stmt->fetch()['total'];
             ?>
             <div class="stat-card">
@@ -242,13 +243,8 @@ $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </td>
                             <td><strong><?= number_format($link['clicks']) ?></strong></td>
                             <td>
-                                <?php if ($link['is_blocked']): ?>
+                                <?php if ($link['is_banned']): ?>
                                     <span class="badge badge-blocked">BLOCKED</span>
-                                    <?php if ($link['blocked_reason']): ?>
-                                        <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
-                                            <?= htmlspecialchars($link['blocked_reason']) ?>
-                                        </div>
-                                    <?php endif; ?>
                                 <?php elseif ($link['expires_at'] && strtotime($link['expires_at']) < time()): ?>
                                     <span class="badge badge-expired">EXPIRED</span>
                                 <?php else: ?>
@@ -262,7 +258,7 @@ $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </td>
                             <td><?= date('M j, Y', strtotime($link['created_at'])) ?></td>
                             <td>
-                                <?php if ($link['is_blocked']): ?>
+                                <?php if ($link['is_banned']): ?>
                                     <a href="?action=unblock&link_id=<?= $link['id'] ?>" class="btn btn-unblock" onclick="return confirm('Unblock this link?')">
                                         <i class="fas fa-check"></i> Unblock
                                     </a>
