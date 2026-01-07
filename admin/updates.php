@@ -97,7 +97,10 @@ try {
         
         if ($commit) {
             $latest_sha = substr($commit['sha'], 0, 7);
-            $current_sha = file_get_contents('../.git-sha') ?? 'unknown';
+            
+            // Read current SHA from .git-sha file, default to 'unknown' if file doesn't exist
+            $git_sha_file = '../.git-sha';
+            $current_sha = file_exists($git_sha_file) ? file_get_contents($git_sha_file) : 'unknown';
             
             if ($latest_sha !== trim($current_sha)) {
                 $update_available = true;
