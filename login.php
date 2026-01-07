@@ -59,13 +59,13 @@ try {
 
 $google_oauth_enabled = ($settings['google_oauth_enabled'] ?? 0) && !empty($settings['google_client_id'] ?? '');
 
-// Check if HypeChats OAuth is configured
-$hypechats_enabled = false;
+// Check if HypeChats OAuth is configured (API still functional, just hidden from UI)
+$hypechats_enabled = false; // HIDDEN: Set to false to hide button
 $hypechats_oauth_url = '#';
 
+// HypeChats API is still active in the background for callback handling
 if (defined('APP_ID') && defined('APP_SECRET') && !empty(APP_ID) && !empty(APP_SECRET) && APP_ID !== 'your_app_id_here') {
-    $hypechats_enabled = true;
-    // HypeChats OAuth URL format: https://hypechats.com/oauth?app_id={YOUR_APP_ID}
+    // API functional but button hidden: $hypechats_enabled = false
     $hypechats_oauth_url = 'https://hypechats.com/oauth?app_id=' . urlencode(APP_ID);
 }
 ?>
@@ -255,6 +255,7 @@ if (defined('APP_ID') && defined('APP_SECRET') && !empty(APP_ID) && !empty(APP_S
             <?php endif; ?>
 
             <?php if ($hypechats_enabled): ?>
+            <!-- HypeChats button HIDDEN but API still functional -->
             <a href="<?= htmlspecialchars($hypechats_oauth_url) ?>" class="oauth-btn hypechats">
                 <i class="fas fa-comments"></i> Continue with HypeChats
             </a>
