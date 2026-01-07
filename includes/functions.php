@@ -2,6 +2,16 @@
 // includes/functions.php - Helper functions
 
 /**
+ * General sanitize function for text input
+ */
+function sanitize($data) {
+    if (is_array($data)) {
+        return array_map('sanitize', $data);
+    }
+    return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+}
+
+/**
  * Sanitize URL - add protocol if missing
  */
 function sanitizeUrl($url) {
@@ -213,7 +223,7 @@ function sendEmail($to, $subject, $message, $settings = []) {
     require_once 'includes/phpmailer/SMTP.php';
     require_once 'includes/phpmailer/Exception.php';
     
-    $mail = new PHPMailerPHPMailerPHPMailer(true);
+    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
     
     try {
         // Server settings
@@ -222,7 +232,7 @@ function sendEmail($to, $subject, $message, $settings = []) {
         $mail->SMTPAuth = true;
         $mail->Username = $settings['smtp_user'];
         $mail->Password = $settings['smtp_pass'];
-        $mail->SMTPSecure = PHPMailerPHPMailerPHPMailer::ENCRYPTION_STARTTLS;
+        $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = $settings['smtp_port'] ?? 587;
         
         // Recipients
