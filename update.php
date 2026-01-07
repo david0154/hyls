@@ -2,16 +2,8 @@
 /**
  * Simple Update Script
  * One-click update from GitHub using git pull
+ * No authentication required - use .htaccess or server config to protect this file
  */
-
-// Security: Set your secret key here
-define('UPDATE_SECRET', 'your_secret_key_here_change_this');
-
-// Check if secret key is provided
-if (!isset($_GET['key']) || $_GET['key'] !== UPDATE_SECRET) {
-    http_response_code(403);
-    die('❌ Access Denied. Invalid or missing secret key.');
-}
 
 // Set timeout
 set_time_limit(300);
@@ -88,37 +80,6 @@ ini_set('max_execution_time', 300);
             transition: all 0.3s;
         }
         .btn:hover { background: #2563eb; }
-        .spinner {
-            border: 3px solid #334155;
-            border-top: 3px solid #22c55e;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .step {
-            padding: 10px 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .step-icon {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-        }
-        .step-icon.pending { background: #334155; }
-        .step-icon.success { background: #22c55e; }
-        .step-icon.error { background: #ef4444; }
     </style>
 </head>
 <body>
@@ -226,6 +187,14 @@ ini_set('max_execution_time', 300);
                             addLog('  • ' . $change, 'success');
                         }
                     }
+                    
+                    // Run database migrations if needed
+                    addLog('Checking for database migrations...', 'info');
+                    if (file_exists($repo_dir . '/install/migrate.php')) {
+                        addLog('Running database migrations...', 'info');
+                        include_once $repo_dir . '/install/migrate.php';
+                        addLog('Database migrations completed', 'success');
+                    }
                 } else {
                     throw new Exception('Git pull failed');
                 }
@@ -262,18 +231,15 @@ ini_set('max_execution_time', 300);
             echo '<a href="/" class="btn" style="background: #22c55e;">🏠 Go to Homepage</a>';
             echo '<a href="/admin/" class="btn" style="background: #3b82f6; margin-left: 10px;">⚙️ Admin Panel</a>';
         } else {
-            echo '<a href="?key=' . UPDATE_SECRET . '" class="btn" style="background: #f59e0b;">🔄 Try Again</a>';
+            echo '<a href="update.php" class="btn" style="background: #f59e0b;">🔄 Try Again</a>';
         }
         echo '</div>';
         ?>
         
         <div style="margin-top: 30px; padding: 20px; background: #0f172a; border-radius: 8px; font-size: 13px; color: #94a3b8;">
             <strong>💡 How to Use:</strong><br>
-            1. Bookmark this URL: <code style="background: #1e293b; padding: 2px 6px; border-radius: 4px; color: #22c55e;"><?php echo 'https://' . $_SERVER['HTTP_HOST'] . '/update.php?key=' . UPDATE_SECRET; ?></code><br>
-            2. Visit this URL whenever you want to update<br>
-            3. Keep your secret key safe!<br>
-            <br>
-            <strong>⚠️ Security:</strong> Change the UPDATE_SECRET in update.php to your own secret key!
+            Simply visit: <code style="background: #1e293b; padding: 2px 6px; border-radius: 4px; color: #22c55e;">https://<?php echo $_SERVER['HTTP_HOST']; ?>/update.php</code><br>
+            The system will automatically check for updates and apply them.
         </div>
     </div>
 </body>
