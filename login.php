@@ -24,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['username'] = $user['username'];
         $_SESSION['profile_picture'] = $user['profile_picture'];
+        $_SESSION['is_admin'] = $user['is_admin'] ?? 0;
         header('Location: dashboard.php');
         exit;
     } else {
@@ -31,7 +32,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$oauth_url = 'https://hypechats.com/oauth/authorize?client_id=' . APP_ID . '&redirect_uri=' . urlencode(SITE_URL . '/auth.php') . '&response_type=code&scope=profile email';
+// Build OAuth URL with proper URL encoding
+$oauth_params = [
+    'client_id' => APP_ID,
+    'redirect_uri' => SITE_URL . '/auth.php',
+    'response_type' => 'code',
+    'scope' => 'profile email'
+];
+$oauth_url = 'https://hypechats.com/oauth/authorize?' . http_build_query($oauth_params);
 ?>
 <!DOCTYPE html>
 <html lang="en">
