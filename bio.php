@@ -8,22 +8,6 @@ require_once 'config.php';
 require_once 'includes/db.php';
 require_once 'includes/functions.php';
 
-// Helper function to adjust color brightness
-function adjustColor($hex, $steps) {
-    $steps = max(-255, min(255, $steps));
-    $hex = str_replace('#', '', $hex);
-    if (strlen($hex) === 3) {
-        $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
-    }
-    $r = hexdec(substr($hex, 0, 2));
-    $g = hexdec(substr($hex, 2, 2));
-    $b = hexdec(substr($hex, 4, 2));
-    $r = max(0, min(255, $r + $steps));
-    $g = max(0, min(255, $g + $steps));
-    $b = max(0, min(255, $b + $steps));
-    return '#' . str_pad(dechex($r), 2, '0', STR_PAD_LEFT) . str_pad(dechex($g), 2, '0', STR_PAD_LEFT) . str_pad(dechex($b), 2, '0', STR_PAD_LEFT);
-}
-
 $bio = null;
 $ad = null;
 $settings = [];
@@ -98,6 +82,9 @@ if (!$bio) {
     header('Location: index.php');
     exit;
 }
+
+// Get the adjusted color for gradient - use adjustColor from functions.php
+$adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color'], -20) : $bio['theme_color'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -121,7 +108,7 @@ if (!$bio) {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, <?= htmlspecialchars($bio['theme_color']) ?> 0%, <?= adjustColor($bio['theme_color'], -20) ?> 100%);
+            background: linear-gradient(135deg, <?= htmlspecialchars($bio['theme_color']) ?> 0%, <?= htmlspecialchars($adjusted_color) ?> 100%);
             min-height: 100vh;
             padding: 20px;
             display: flex;
