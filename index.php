@@ -1,4 +1,3 @@
-
 <?php
 session_start();
 require_once 'config.php';
@@ -208,7 +207,8 @@ if (isset($_SESSION['user_id'])) {
                 <a href="index.php" class="logo">🔗 HYLS</a>
                 <div class="nav-buttons">
                     <a href="login.php" class="btn-login">Login</a>
-                    <a href="https://hypechats.com/oauth?app_id=<?= APP_ID ?>" class="btn-signup">Sign Up with HypeChats</a>
+                    <!-- HypeChats button HIDDEN - Using regular login now -->
+                    <a href="login.php" class="btn-signup">Sign Up</a>
                 </div>
             </div>
         </div>
@@ -219,7 +219,8 @@ if (isset($_SESSION['user_id'])) {
             <h1>Shorten Links. Share Everything.</h1>
             <p>Create short links, bio pages, and QR codes - all in one powerful platform</p>
             <div class="cta-buttons">
-                <a href="https://hypechats.com/oauth?app_id=<?= APP_ID ?>" class="cta-primary">Get Started Free</a>
+                <!-- HypeChats button HIDDEN - Using regular login now -->
+                <a href="login.php" class="cta-primary">Get Started Free</a>
                 <a href="#features" class="cta-secondary">Learn More</a>
             </div>
         </div>
@@ -251,8 +252,8 @@ if (isset($_SESSION['user_id'])) {
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">🔐</div>
-                    <h3>HypeChats Login</h3>
-                    <p>Secure OAuth integration with your HypeChats account for easy access</p>
+                    <h3>Secure Access</h3>
+                    <p>Protected with industry-standard security and password protection options</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">⚡</div>
@@ -285,7 +286,7 @@ if (isset($_SESSION['user_id'])) {
 
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2025 HYLS - HypeLink Shortener. Powered by <a href="https://hypechats.com" target="_blank">HypeChats</a></p>
+            <p>&copy; 2025 HYLS - HypeLink Shortener. All rights reserved.</p>
             <p style="margin-top: 12px; font-size: 14px;">
                 <a href="privacy.php">Privacy Policy</a> • 
                 <a href="terms.php">Terms of Service</a> • 
