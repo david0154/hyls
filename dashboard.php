@@ -46,6 +46,12 @@ try {
     foreach ($short_links as $link) {
         $total_clicks += $link['clicks'];
     }
+    
+    // Get messages
+    $success_message = $_SESSION['success'] ?? '';
+    $error_message = $_SESSION['error'] ?? '';
+    unset($_SESSION['success']);
+    unset($_SESSION['error']);
 } catch (Exception $e) {
     error_log("Dashboard Error: " . $e->getMessage());
     die("An error occurred. Please try again later.");
@@ -150,6 +156,43 @@ try {
         .main-content {
             padding: 40px 20px;
         }
+        .alert {
+            padding: 16px 20px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            font-weight: 600;
+            animation: slideDown 0.3s ease-out;
+        }
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 2px solid #10b981;
+        }
+        .alert-error {
+            background: #fee2e2;
+            color: #7f1d1d;
+            border: 2px solid #ef4444;
+        }
+        .alert-close {
+            float: right;
+            cursor: pointer;
+            font-size: 20px;
+            font-weight: bold;
+            line-height: 1;
+        }
+        .alert-close:hover {
+            opacity: 0.7;
+        }
         .welcome-section {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -200,6 +243,8 @@ try {
             font-weight: 600;
             transition: all 0.3s;
             display: inline-block;
+            border: none;
+            cursor: pointer;
         }
         .btn-primary {
             background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
@@ -397,6 +442,20 @@ try {
     </nav>
 
     <div class="container main-content">
+        <?php if ($success_message): ?>
+        <div class="alert alert-success">
+            <span class="alert-close" onclick="this.parentElement.style.display='none';">×</span>
+            ✅ <?= $success_message ?>
+        </div>
+        <?php endif; ?>
+        
+        <?php if ($error_message): ?>
+        <div class="alert alert-error">
+            <span class="alert-close" onclick="this.parentElement.style.display='none';">×</span>
+            ❌ <?= $error_message ?>
+        </div>
+        <?php endif; ?>
+
         <div class="welcome-section">
             <h1>Welcome back, <?= htmlspecialchars($user['first_name'] ?? $user['username']) ?>! 👋</h1>
             <p>Manage your links and bio page from your dashboard</p>
@@ -426,7 +485,7 @@ try {
         </div>
 
         <div class="action-buttons">
-            <a href="#" onclick="openModal('createLinkModal'); return false;" class="btn btn-primary">➕ Create Short Link</a>
+            <button onclick="openModal('createLinkModal')" class="btn btn-primary">➕ Create Short Link</button>
             <a href="biolink.php" class="btn btn-secondary">✏️ Edit Bio Link</a>
             <?php if ($bio_link): ?>
             <a href="<?= SITE_URL ?>/bio/<?= htmlspecialchars($user['username']) ?>" target="_blank" class="btn btn-secondary">👁️ View Bio Page</a>
@@ -476,12 +535,12 @@ try {
             <h2 class="modal-title">Create Short Link</h2>
             <form action="shorten.php" method="POST">
                 <div class="form-group">
-                    <label>Original URL</label>
+                    <label>Original URL <span style="color: #ef4444;">*</span></label>
                     <input type="url" name="url" placeholder="https://example.com/your-long-url" required>
                 </div>
                 <div class="form-group">
                     <label>Custom Code (Optional)</label>
-                    <input type="text" name="custom_code" placeholder="my-link" pattern="[a-zA-Z0-9-_]+" maxlength="20">
+                    <input type="text" name="custom_code" placeholder="my-link" pattern="[a-zA-Z0-9\-_]{2,20}" title="2-20 characters: letters, numbers, dash, underscore">
                 </div>
                 <div class="form-group">
                     <label>Title (Optional)</label>
@@ -519,6 +578,16 @@ try {
                 e.target.classList.remove('active');
             }
         });
+        
+        // Auto-close alerts after 5 seconds
+        setTimeout(function() {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                alert.style.transition = 'opacity 0.3s';
+                alert.style.opacity = '0';
+                setTimeout(() => alert.remove(), 300);
+            });
+        }, 5000);
     </script>
 </body>
 </html>
