@@ -133,7 +133,7 @@ RewriteRule ^([a-zA-Z0-9_-]+)$ r.php?c=$1 [L,QSA]
 ## 🔐 HypeChats OAuth Setup (FIXED)
 
 ### Get Your Credentials
-1. Visit: https://hypechats.com/developer
+1. Visit: https://hypechats.com/
 2. Create a new app
 3. Set **Callback URL**: `https://yourdomain.com/auth.php` (MUST be HTTPS)
 4. Copy your **App ID** and **App Secret**
