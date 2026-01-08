@@ -1,7 +1,7 @@
 <?php
-// bio.php - Bio link display page with enhanced design
+// bio.php - Bio link display page with ALL 29 platforms
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
 require_once 'config.php';
@@ -11,6 +11,7 @@ require_once 'includes/functions.php';
 $bio = null;
 $ad = null;
 $settings = [];
+$gallery_images = [];
 
 try {
     if (!class_exists('Database')) {
@@ -27,7 +28,7 @@ try {
         exit;
     }
 
-    $stmt = $db->prepare("SELECT b.*, u.username as user_username FROM bio_links b JOIN users u ON b.user_id = u.id WHERE u.username = ?");
+    $stmt = $db->prepare("SELECT b.*, u.username as user_username, u.id as user_id FROM bio_links b JOIN users u ON b.user_id = u.id WHERE u.username = ?");
     if (!$stmt) {
         throw new Exception('Failed to prepare statement');
     }
@@ -38,6 +39,15 @@ try {
     if (!$bio) {
         header('Location: index.php');
         exit;
+    }
+
+    // Get gallery images
+    try {
+        $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
+        $stmt->execute([$bio['user_id']]);
+        $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        error_log("Gallery error: " . $e->getMessage());
     }
 
     try {
@@ -99,9 +109,7 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
     <?php endif; ?>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
         html { scroll-behavior: smooth; }
-        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, <?= htmlspecialchars($bio['theme_color']) ?> 0%, <?= htmlspecialchars($adjusted_color) ?> 100%);
@@ -114,7 +122,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             position: relative;
             overflow-x: hidden;
         }
-        
         body::before {
             content: '';
             position: fixed;
@@ -127,11 +134,15 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             pointer-events: none;
             z-index: -1;
         }
+        .container { max-width: 700px; width: 100%; z-index: 1; }
         
-        .container {
-            max-width: 700px;
+        /* Cover Image */
+        .cover-image {
             width: 100%;
-            z-index: 1;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 30px 30px 0 0;
+            margin-bottom: -60px;
         }
         
         .profile-card {
@@ -140,23 +151,19 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             border-radius: 30px;
             padding: 50px 40px;
             text-align: center;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2),
-                        0 0 1px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 1px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
             border: 1px solid rgba(255, 255, 255, 0.5);
             animation: slideUp 0.6s ease-out;
         }
-        
         @keyframes slideUp {
             from { opacity: 0; transform: translateY(30px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
         }
-        
         .profile-image-wrapper {
             position: relative;
             width: 140px;
@@ -168,7 +175,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
             animation: fadeIn 0.8s ease-out;
         }
-        
         .profile-image {
             width: 100%;
             height: 100%;
@@ -177,7 +183,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             border: 4px solid white;
             box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        
         .display-name {
             font-size: 32px;
             font-weight: 800;
@@ -188,14 +193,12 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        
         .username {
             color: #64748b;
             margin-bottom: 12px;
             font-size: 16px;
             font-weight: 500;
         }
-        
         .badge-container {
             display: flex;
             gap: 10px;
@@ -203,12 +206,11 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             flex-wrap: wrap;
             margin-bottom: 20px;
         }
-        
         .badge {
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            background: linear-gradient(135deg, rgba(<?= htmlspecialchars($bio['theme_color']) ?>, 0.1), rgba(<?= htmlspecialchars($adjusted_color) ?>, 0.1));
+            background: rgba(99, 102, 241, 0.1);
             color: <?= htmlspecialchars($bio['theme_color']) ?>;
             padding: 8px 16px;
             border-radius: 20px;
@@ -216,7 +218,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             font-weight: 600;
             border: 1px solid <?= htmlspecialchars($bio['theme_color']) ?>;
         }
-        
         .bio-text {
             color: #334155;
             line-height: 1.8;
@@ -228,12 +229,35 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             border-left: 4px solid <?= htmlspecialchars($bio['theme_color']) ?>;
         }
         
+        /* Gallery */
+        .gallery-section {
+            margin: 25px 0;
+        }
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .gallery-item {
+            aspect-ratio: 1;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .gallery-item:hover { transform: scale(1.05); }
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
         .divider {
             height: 1px;
             background: linear-gradient(90deg, transparent, rgba(0,0,0,0.1), transparent);
             margin: 25px 0;
         }
-        
         .section-title {
             font-size: 14px;
             font-weight: 700;
@@ -243,7 +267,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             margin-top: 25px;
             margin-bottom: 16px;
         }
-        
         .social-links {
             display: flex;
             gap: 15px;
@@ -251,7 +274,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             flex-wrap: wrap;
             animation: fadeIn 0.8s ease-out 0.2s both;
         }
-        
         .social-btn {
             display: inline-flex;
             align-items: center;
@@ -269,7 +291,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             position: relative;
             overflow: hidden;
         }
-        
         .social-btn::before {
             content: '';
             position: absolute;
@@ -282,18 +303,12 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             transform: translate(-50%, -50%);
             transition: width 0.6s, height 0.6s;
         }
-        
-        .social-btn:hover::before {
-            width: 300px;
-            height: 300px;
-        }
-        
+        .social-btn:hover::before { width: 300px; height: 300px; }
         .social-btn:hover {
             transform: translateY(-8px) scale(1.1);
             box-shadow: 0 15px 30px rgba(0, 0, 0, 0.25);
             filter: brightness(1.1);
         }
-        
         .contact-links {
             display: flex;
             flex-direction: column;
@@ -301,7 +316,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             margin-top: 16px;
             animation: fadeIn 0.8s ease-out 0.4s both;
         }
-        
         .contact-btn {
             display: flex;
             align-items: center;
@@ -317,90 +331,12 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             font-size: 15px;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
             border: 2px solid white;
-            position: relative;
-            overflow: hidden;
         }
-        
-        .contact-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: rgba(255,255,255,0.2);
-            transition: left 0.3s;
-            z-index: 0;
-        }
-        
-        .contact-btn:hover::before {
-            left: 100%;
-        }
-        
-        .contact-btn span {
-            position: relative;
-            z-index: 1;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            width: 100%;
-            justify-content: center;
-        }
-        
         .contact-btn:hover {
             transform: translateY(-4px);
             box-shadow: 0 12px 25px rgba(0, 0, 0, 0.25);
             filter: brightness(1.05);
         }
-        
-        .contact-btn i {
-            font-size: 18px;
-        }
-        
-        <?php if ($ad): ?>
-        .ad-banner {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.9));
-            border-radius: 20px;
-            padding: 25px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-            margin-bottom: 20px;
-            border: 1px solid rgba(0, 0, 0, 0.05);
-            backdrop-filter: blur(10px);
-            animation: slideUp 0.6s ease-out;
-        }
-        .ad-banner h3 {
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-size: 22px;
-            margin-bottom: 10px;
-            font-weight: 800;
-        }
-        .ad-banner p {
-            color: #64748b;
-            margin-bottom: 16px;
-            line-height: 1.6;
-            font-size: 14px;
-        }
-        .ad-banner a {
-            display: inline-block;
-            padding: 12px 28px;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 10px;
-            font-weight: 700;
-            transition: all 0.3s;
-            box-shadow: 0 5px 15px rgba(99, 102, 241, 0.3);
-        }
-        .ad-banner a:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 25px rgba(99, 102, 241, 0.4);
-        }
-        <?php endif; ?>
-        
         .powered-by {
             text-align: center;
             margin-top: 25px;
@@ -426,60 +362,28 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
         }
-        
         @media (max-width: 768px) {
-            .profile-card {
-                padding: 35px 25px;
-                border-radius: 25px;
-            }
-            .display-name {
-                font-size: 26px;
-            }
-            .profile-image-wrapper {
-                width: 120px;
-                height: 120px;
-            }
-            .social-btn {
-                width: 50px;
-                height: 50px;
-                font-size: 20px;
-            }
+            .profile-card { padding: 35px 25px; border-radius: 25px; }
+            .display-name { font-size: 26px; }
+            .profile-image-wrapper { width: 120px; height: 120px; }
+            .social-btn { width: 50px; height: 50px; font-size: 20px; }
+            .gallery-grid { grid-template-columns: repeat(2, 1fr); }
+            .cover-image { height: 150px; }
         }
-        
         @media (max-width: 480px) {
-            .profile-card {
-                padding: 25px 18px;
-            }
-            .display-name {
-                font-size: 22px;
-            }
-            .bio-text {
-                font-size: 14px;
-                padding: 15px;
-            }
-            .badge-container {
-                gap: 6px;
-            }
-            .badge {
-                font-size: 12px;
-                padding: 6px 12px;
-            }
+            .profile-card { padding: 25px 18px; }
+            .display-name { font-size: 22px; }
+            .bio-text { font-size: 14px; padding: 15px; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <?php if ($ad): ?>
-        <div class="ad-banner">
-            <h3><?= htmlspecialchars($ad['title']) ?></h3>
-            <p><?= htmlspecialchars($ad['description']) ?></p>
-            <a href="<?= htmlspecialchars($ad['url']) ?>" target="_blank" rel="noopener">
-                <?= htmlspecialchars($ad['cta_text']) ?> <i class="fas fa-arrow-right"></i>
-            </a>
-        </div>
-        <?php endif; ?>
-
         <div class="profile-card">
+            <?php if (!empty($bio['cover_image'])): ?>
+            <img src="<?= htmlspecialchars(SITE_URL) ?>/<?= htmlspecialchars($bio['cover_image']) ?>" alt="Cover" class="cover-image" loading="lazy">
+            <?php endif; ?>
+            
             <div class="profile-image-wrapper">
                 <?php if (!empty($bio['profile_image'])): ?>
                 <img src="<?= htmlspecialchars(SITE_URL) ?>/<?= htmlspecialchars($bio['profile_image']) ?>" alt="Profile" class="profile-image" loading="lazy">
@@ -499,29 +403,56 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             <p class="bio-text"><?= nl2br(htmlspecialchars($bio['bio'])) ?></p>
             <?php endif; ?>
             
+            <?php if (!empty($gallery_images)): ?>
+            <div class="divider"></div>
+            <div class="section-title"><i class="fas fa-images"></i> Gallery</div>
+            <div class="gallery-section">
+                <div class="gallery-grid">
+                    <?php foreach ($gallery_images as $img): ?>
+                    <div class="gallery-item">
+                        <img src="<?= htmlspecialchars($img['image_url']) ?>" alt="Gallery" loading="lazy">
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+            
             <?php
+            // ALL 29 PLATFORMS
             $socials = [
                 'facebook' => 'fab fa-facebook-f',
                 'instagram' => 'fab fa-instagram',
                 'twitter' => 'fab fa-x-twitter',
-                'linkedin' => 'fab fa-linkedin-in',
-                'youtube' => 'fab fa-youtube',
+                'threads' => 'fab fa-threads',
                 'tiktok' => 'fab fa-tiktok',
+                'youtube' => 'fab fa-youtube',
+                'linkedin' => 'fab fa-linkedin-in',
                 'github' => 'fab fa-github',
-                'pinterest' => 'fab fa-pinterest-p',
-                'snapchat' => 'fab fa-snapchat-ghost',
                 'discord' => 'fab fa-discord',
                 'twitch' => 'fab fa-twitch',
                 'telegram' => 'fab fa-telegram',
                 'whatsapp' => 'fab fa-whatsapp',
                 'spotify' => 'fab fa-spotify',
                 'reddit' => 'fab fa-reddit-alien',
+                'snapchat' => 'fab fa-snapchat-ghost',
+                'pinterest' => 'fab fa-pinterest-p',
+                'medium' => 'fab fa-medium',
+                'substack' => 'fas fa-newspaper',
+                'patreon' => 'fab fa-patreon',
+                'onlyfans' => 'fas fa-user-lock',
+                'bluesky' => 'fas fa-cloud',
+                'mastodon' => 'fab fa-mastodon',
+                'line' => 'fab fa-line',
+                'cashapp' => 'fas fa-dollar-sign',
+                'venmo' => 'fas fa-money-bill-wave',
+                'paypal' => 'fab fa-paypal',
                 'website' => 'fas fa-globe'
             ];
             
             $has_socials = false;
             foreach ($socials as $platform => $icon) {
-                if (!empty($bio[$platform]) && ($bio[$platform . '_enabled'] ?? 1)) {
+                $enabled = isset($bio[$platform . '_enabled']) ? ($bio[$platform . '_enabled'] == 1) : true;
+                if (!empty($bio[$platform]) && $enabled) {
                     $has_socials = true;
                     break;
                 }
@@ -534,7 +465,7 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             <div class="social-links">
                 <?php
                 foreach ($socials as $platform => $icon) {
-                    $enabled = $bio[$platform . '_enabled'] ?? 1;
+                    $enabled = isset($bio[$platform . '_enabled']) ? ($bio[$platform . '_enabled'] == 1) : true;
                     $url = $bio[$platform] ?? '';
                     
                     if (!empty($url) && $enabled) {
@@ -549,8 +480,8 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             <?php endif; ?>
             
             <?php 
-            $has_email = !empty($bio['email']) && ($bio['email_enabled'] ?? 1);
-            $has_phone = !empty($bio['phone']) && ($bio['phone_enabled'] ?? 1);
+            $has_email = !empty($bio['email']) && (isset($bio['email_enabled']) ? ($bio['email_enabled'] == 1) : true);
+            $has_phone = !empty($bio['phone']) && (isset($bio['phone_enabled']) ? ($bio['phone_enabled'] == 1) : true);
             if ($has_email || $has_phone): 
             ?>
             <div class="divider"></div>
@@ -558,13 +489,13 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             <div class="contact-links">
                 <?php if ($has_email): ?>
                 <a href="mailto:<?= htmlspecialchars($bio['email']) ?>" class="contact-btn">
-                    <span><i class="fas fa-envelope"></i> Email Me</span>
+                    <i class="fas fa-envelope"></i> Email Me
                 </a>
                 <?php endif; ?>
                 
                 <?php if ($has_phone): ?>
                 <a href="tel:<?= htmlspecialchars($bio['phone']) ?>" class="contact-btn">
-                    <span><i class="fas fa-phone"></i> Call Me</span>
+                    <i class="fas fa-phone"></i> Call Me
                 </a>
                 <?php endif; ?>
             </div>
@@ -577,12 +508,5 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             </a>
         </div>
     </div>
-
-    <script>
-        // Smooth page load animation
-        document.addEventListener('DOMContentLoaded', function() {
-            document.body.style.opacity = '1';
-        });
-    </script>
 </body>
 </html>
