@@ -1,8 +1,9 @@
 <?php
-// biolink.php - Bio link management page with ALL features
+// biolink_final.php - COMPLETE WORKING VERSION
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 1);
 ini_set('log_errors', 1);
+error_log("=== Biolink page loaded ===");
 
 session_start();
 require_once 'config.php';
@@ -41,100 +42,115 @@ try {
         $stmt->execute([$user_id]);
         $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
-        // Table doesn't exist yet, ignore
+        error_log("Gallery table error: " . $e->getMessage());
     }
 
     // Handle gallery delete
     if (isset($_GET['delete_gallery'])) {
         $image_id = (int)$_GET['delete_gallery'];
         
-        $stmt = $db->prepare("SELECT image_url FROM bio_gallery WHERE id = ? AND user_id = ?");
-        $stmt->execute([$image_id, $user_id]);
-        $image = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($image) {
-            $stmt = $db->prepare("DELETE FROM bio_gallery WHERE id = ? AND user_id = ?");
+        try {
+            $stmt = $db->prepare("SELECT image_url FROM bio_gallery WHERE id = ? AND user_id = ?");
             $stmt->execute([$image_id, $user_id]);
+            $image = $stmt->fetch(PDO::FETCH_ASSOC);
             
-            $file_path = __DIR__ . $image['image_url'];
-            if (file_exists($file_path)) {
-                @unlink($file_path);
+            if ($image) {
+                $stmt = $db->prepare("DELETE FROM bio_gallery WHERE id = ? AND user_id = ?");
+                $stmt->execute([$image_id, $user_id]);
+                
+                $file_path = __DIR__ . $image['image_url'];
+                if (file_exists($file_path)) {
+                    @unlink($file_path);
+                }
+                
+                $success = 'Image deleted successfully!';
+                
+                // Refresh gallery
+                $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
+                $stmt->execute([$user_id]);
+                $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
             }
-            
-            $success = 'Image deleted successfully!';
-            // Refresh gallery
-            $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
-            $stmt->execute([$user_id]);
-            $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $error = 'Delete failed: ' . $e->getMessage();
+            error_log("Gallery delete error: " . $e->getMessage());
         }
     }
 
     // Handle gallery upload
-    if (isset($_FILES['gallery_images'])) {
+    if (isset($_FILES['gallery_images']) && !empty($_FILES['gallery_images']['name'][0])) {
         $uploaded_count = 0;
         $errors = [];
         
-        $stmt = $db->prepare("SELECT COUNT(*) as count FROM bio_gallery WHERE user_id = ?");
-        $stmt->execute([$user_id]);
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        $existing_count = $result['count'];
-        
-        $files = $_FILES['gallery_images'];
-        
-        if (!is_dir('uploads/bio/gallery')) {
-            mkdir('uploads/bio/gallery', 0755, true);
-        }
-        
-        for ($i = 0; $i < count($files['name']); $i++) {
-            if ($existing_count + $uploaded_count >= 6) {
-                $errors[] = "Maximum 6 images allowed";
-                break;
+        try {
+            $stmt = $db->prepare("SELECT COUNT(*) as count FROM bio_gallery WHERE user_id = ?");
+            $stmt->execute([$user_id]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            $existing_count = $result['count'];
+            
+            $files = $_FILES['gallery_images'];
+            
+            if (!is_dir('uploads/bio/gallery')) {
+                mkdir('uploads/bio/gallery', 0755, true);
             }
             
-            if ($files['error'][$i] === UPLOAD_ERR_OK) {
-                $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-                $ext = strtolower(pathinfo($files['name'][$i], PATHINFO_EXTENSION));
-                
-                if (!in_array($ext, $allowed)) {
-                    $errors[] = 'Invalid file type: ' . $files['name'][$i];
-                    continue;
+            for ($i = 0; $i < count($files['name']); $i++) {
+                if ($existing_count + $uploaded_count >= 6) {
+                    $errors[] = "Maximum 6 images allowed";
+                    break;
                 }
                 
-                if ($files['size'][$i] > 5 * 1024 * 1024) {
-                    $errors[] = 'File too large: ' . $files['name'][$i];
-                    continue;
-                }
-                
-                $new_filename = 'gallery_' . $user_id . '_' . time() . '_' . uniqid() . '.' . $ext;
-                $upload_path = 'uploads/bio/gallery/' . $new_filename;
-                
-                if (move_uploaded_file($files['tmp_name'][$i], $upload_path)) {
-                    $stmt = $db->prepare("SELECT COALESCE(MAX(image_order), 0) as max_order FROM bio_gallery WHERE user_id = ?");
-                    $stmt->execute([$user_id]);
-                    $order_result = $stmt->fetch(PDO::FETCH_ASSOC);
-                    $new_order = $order_result['max_order'] + 1;
+                if ($files['error'][$i] === UPLOAD_ERR_OK) {
+                    $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+                    $ext = strtolower(pathinfo($files['name'][$i], PATHINFO_EXTENSION));
                     
-                    $stmt = $db->prepare("INSERT INTO bio_gallery (user_id, image_url, image_order, created_at) VALUES (?, ?, ?, NOW())");
-                    $stmt->execute([$user_id, '/' . $upload_path, $new_order]);
-                    $uploaded_count++;
+                    if (!in_array($ext, $allowed)) {
+                        $errors[] = 'Invalid file type: ' . $files['name'][$i];
+                        continue;
+                    }
+                    
+                    if ($files['size'][$i] > 5 * 1024 * 1024) {
+                        $errors[] = 'File too large: ' . $files['name'][$i];
+                        continue;
+                    }
+                    
+                    $new_filename = 'gallery_' . $user_id . '_' . time() . '_' . uniqid() . '.' . $ext;
+                    $upload_path = 'uploads/bio/gallery/' . $new_filename;
+                    
+                    if (move_uploaded_file($files['tmp_name'][$i], $upload_path)) {
+                        $stmt = $db->prepare("SELECT COALESCE(MAX(image_order), 0) as max_order FROM bio_gallery WHERE user_id = ?");
+                        $stmt->execute([$user_id]);
+                        $order_result = $stmt->fetch(PDO::FETCH_ASSOC);
+                        $new_order = $order_result['max_order'] + 1;
+                        
+                        $stmt = $db->prepare("INSERT INTO bio_gallery (user_id, image_url, image_order, created_at) VALUES (?, ?, ?, NOW())");
+                        $stmt->execute([$user_id, '/' . $upload_path, $new_order]);
+                        $uploaded_count++;
+                    }
                 }
             }
+            
+            if ($uploaded_count > 0) {
+                $success = "$uploaded_count image(s) uploaded successfully!";
+            }
+            if (!empty($errors)) {
+                $error = implode(', ', array_unique($errors));
+            }
+            
+            // Refresh gallery images
+            $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
+            $stmt->execute([$user_id]);
+            $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+        } catch (Exception $e) {
+            $error = 'Upload failed: ' . $e->getMessage();
+            error_log("Gallery upload error: " . $e->getMessage());
         }
-        
-        if ($uploaded_count > 0) {
-            $success = "$uploaded_count image(s) uploaded successfully!";
-        }
-        if (!empty($errors)) {
-            $error = implode(', ', array_unique($errors));
-        }
-        
-        // Refresh gallery images
-        $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
-        $stmt->execute([$user_id]);
-        $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_FILES['gallery_images'])) {
+    // MAIN FORM SUBMISSION
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_FILES['gallery_images']) && !isset($_GET['delete_gallery'])) {
+        error_log("=== Processing bio form submission ===");
+        
         $username = $current_user['username'];
         $display_name = $_POST['display_name'] ?? '';
         $bio_text = $_POST['bio'] ?? '';
@@ -149,15 +165,8 @@ try {
             'onlyfans', 'cashapp', 'venmo', 'paypal', 'line'
         ];
         
-        // CRITICAL FIX: Collect data properly
-        $social_data = [];
-        foreach ($socials as $social) {
-            // Get URL value
-            $social_data[$social] = trim($_POST[$social] ?? '');
-            
-            // Get enabled state - FIXED: isset() properly checks checkbox
-            $social_data[$social . '_enabled'] = isset($_POST[$social . '_enabled']) ? 1 : 0;
-        }
+        // CRITICAL: Collect ALL POST data
+        error_log("POST data: " . print_r($_POST, true));
         
         // Handle profile image upload
         $profile_image = $bio['profile_image'] ?? '';
@@ -209,67 +218,80 @@ try {
         
         if (empty($error)) {
             try {
-                // Build column list dynamically based on existing columns
-                $base_columns = ['username', 'display_name', 'bio', 'theme_color', 'profile_image'];
+                // Get existing columns from database
+                $stmt = $db->query("SHOW COLUMNS FROM bio_links");
+                $all_db_columns = [];
+                while ($col = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $all_db_columns[] = $col['Field'];
+                }
+                
+                error_log("Database columns: " . implode(', ', $all_db_columns));
+                
+                // Build data array with ALL values
+                $data = [
+                    'username' => $username,
+                    'display_name' => $display_name,
+                    'bio' => $bio_text,
+                    'theme_color' => $theme_color,
+                    'profile_image' => $profile_image
+                ];
                 
                 // Add cover_image if column exists
-                $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE 'cover_image'");
-                if ($stmt->rowCount() > 0) {
-                    $base_columns[] = 'cover_image';
+                if (in_array('cover_image', $all_db_columns)) {
+                    $data['cover_image'] = $cover_image;
                 }
                 
-                // CRITICAL FIX: Build social columns list in exact order
-                $social_columns = [];
+                // Add social data - CHECK EACH PLATFORM
                 foreach ($socials as $social) {
-                    // Check if base column exists
-                    $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE '$social'");
-                    if ($stmt->rowCount() > 0) {
-                        $social_columns[] = $social;
-                        
-                        // Check if enabled column exists
-                        $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE '{$social}_enabled'");
-                        if ($stmt->rowCount() > 0) {
-                            $social_columns[] = $social . '_enabled';
-                        }
+                    // Get URL value (empty if not provided)
+                    $url_value = trim($_POST[$social] ?? '');
+                    
+                    // Get enabled state - CRITICAL: Default to 0 if not checked
+                    $enabled_value = isset($_POST[$social . '_enabled']) ? 1 : 0;
+                    
+                    error_log("$social: URL='$url_value' Enabled=$enabled_value");
+                    
+                    // Add URL if column exists
+                    if (in_array($social, $all_db_columns)) {
+                        $data[$social] = $url_value;
+                    }
+                    
+                    // Add enabled state if column exists
+                    if (in_array($social . '_enabled', $all_db_columns)) {
+                        $data[$social . '_enabled'] = $enabled_value;
                     }
                 }
-                
-                $all_columns = array_merge($base_columns, $social_columns);
                 
                 if ($bio) {
-                    // Update existing bio
-                    $set_parts = array_map(function($col) { return "$col = ?"; }, $all_columns);
+                    // UPDATE existing bio
+                    $set_parts = [];
+                    $values = [];
+                    
+                    foreach ($data as $key => $value) {
+                        $set_parts[] = "`$key` = ?";
+                        $values[] = $value;
+                    }
+                    
+                    $values[] = $user_id; // WHERE user_id = ?
+                    
                     $sql = "UPDATE bio_links SET " . implode(', ', $set_parts) . " WHERE user_id = ?";
-                    
-                    $values = [$username, $display_name, $bio_text, $theme_color, $profile_image];
-                    if (in_array('cover_image', $base_columns)) {
-                        $values[] = $cover_image;
-                    }
-                    
-                    // CRITICAL FIX: Add values in EXACT order of social_columns
-                    foreach ($social_columns as $col) {
-                        // Each column in social_columns is either 'platform' or 'platform_enabled'
-                        $values[] = $social_data[$col];
-                    }
-                    $values[] = $user_id;
+                    error_log("UPDATE SQL: $sql");
+                    error_log("UPDATE VALUES: " . print_r($values, true));
                     
                     $stmt = $db->prepare($sql);
                     $stmt->execute($values);
+                    
                 } else {
-                    // Create new bio
-                    $columns_str = implode(', ', array_merge(['user_id'], $all_columns));
-                    $placeholders = implode(', ', array_fill(0, count($all_columns) + 1, '?'));
-                    $sql = "INSERT INTO bio_links ($columns_str) VALUES ($placeholders)";
+                    // INSERT new bio
+                    $data['user_id'] = $user_id;
                     
-                    $values = [$user_id, $username, $display_name, $bio_text, $theme_color, $profile_image];
-                    if (in_array('cover_image', $base_columns)) {
-                        $values[] = $cover_image;
-                    }
+                    $columns = array_keys($data);
+                    $placeholders = array_fill(0, count($data), '?');
+                    $values = array_values($data);
                     
-                    // Add values in EXACT order of social_columns
-                    foreach ($social_columns as $col) {
-                        $values[] = $social_data[$col];
-                    }
+                    $sql = "INSERT INTO bio_links (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
+                    error_log("INSERT SQL: $sql");
+                    error_log("INSERT VALUES: " . print_r($values, true));
                     
                     $stmt = $db->prepare($sql);
                     $stmt->execute($values);
@@ -282,9 +304,12 @@ try {
                 $stmt->execute([$user_id]);
                 $bio = $stmt->fetch();
                 
+                error_log("Bio saved successfully");
+                
             } catch (Exception $e) {
                 $error = 'Failed to save bio link: ' . $e->getMessage();
                 error_log("Bio Link Save Error: " . $e->getMessage());
+                error_log("Stack trace: " . $e->getTraceAsString());
             }
         }
     }
@@ -295,7 +320,8 @@ try {
     }
 } catch (Exception $e) {
     error_log("Biolink Page Error: " . $e->getMessage());
-    die("An error occurred. Please try again later.");
+    error_log("Stack trace: " . $e->getTraceAsString());
+    die("An error occurred: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
@@ -692,15 +718,14 @@ try {
 
     <div class="container">
         <!-- Gallery Section -->
-        <?php if (!empty($gallery_images) || true): ?>
         <div class="card">
             <h2><i class="fas fa-images"></i> Image Gallery (<?= count($gallery_images) ?>/6)</h2>
             
-            <?php if ($success && strpos($success, 'image') !== false): ?>
+            <?php if ($success && (strpos($success, 'image') !== false || strpos($success, 'deleted') !== false)): ?>
                 <div class="alert alert-success"><i class="fas fa-check-circle"></i> <?= htmlspecialchars($success) ?></div>
             <?php endif; ?>
             
-            <?php if ($error): ?>
+            <?php if ($error && strpos($error, 'image') !== false): ?>
                 <div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
             
@@ -739,13 +764,16 @@ try {
             </p>
             <?php endif; ?>
         </div>
-        <?php endif; ?>
 
         <div class="card">
             <h2><i class="fas fa-id-card"></i> Bio Link Settings</h2>
             
-            <?php if ($success && strpos($success, 'image') === false): ?>
+            <?php if ($success && strpos($success, 'image') === false && strpos($success, 'deleted') === false): ?>
                 <div class="alert alert-success"><i class="fas fa-check-circle"></i> <?= htmlspecialchars($success) ?></div>
+            <?php endif; ?>
+            
+            <?php if ($error && strpos($error, 'image') === false): ?>
+                <div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
             
             <div class="info-box">
@@ -837,7 +865,7 @@ try {
                 
                 foreach ($all_platforms as $key => $platform):
                     $value = $bio[$key] ?? '';
-                    $enabled = ($bio[$key . '_enabled'] ?? 1) == 1;
+                    $enabled = isset($bio[$key . '_enabled']) ? ($bio[$key . '_enabled'] == 1) : true;
                 ?>
                 <div class="social-section">
                     <h3 style="color: <?= $platform['color'] ?>;"><i class="<?= $platform['icon'] ?>"></i> <?= $platform['label'] ?></h3>
@@ -878,6 +906,15 @@ try {
         
         // Initialize
         updateColorValue();
+        
+        // Debug: Log form data before submit
+        document.querySelector('form').addEventListener('submit', function(e) {
+            console.log('=== Form submitting ===');
+            const formData = new FormData(this);
+            for (let [key, value] of formData.entries()) {
+                console.log(key + ': ' + value);
+            }
+        });
     </script>
 </body>
 </html>
