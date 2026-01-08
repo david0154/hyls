@@ -35,6 +35,138 @@ try {
     $stmt->execute([$user_id]);
     $bio = $stmt->fetch();
 
+
+    // ===  AUTO-DETECTION (SAFE FOR SHARED HOSTING) ===
+    $has_video_table = false;
+    $has_crop_columns = false;
+    try {
+        $stmt = $db->query("SHOW TABLES LIKE 'bio_social_videos'");
+        $has_video_table = ($stmt->rowCount() > 0);
+
+        $stmt = $db->query("SHOW COLUMNS FROM bio_gallery LIKE 'crop_%'");
+        $has_crop_columns = ($stmt->rowCount() > 0);
+    } catch (Exception $e) {
+        error_log("Feature detection: " . $e->getMessage());
+    }
+
+    // === SOCIAL VIDEOS ===
+    $social_videos = [];
+    if ($has_video_table) {
+        try {
+            $stmt = $db->prepare("SELECT * FROM bio_social_videos WHERE user_id = ? ORDER BY display_order ASC");
+            $stmt->execute([$user_id]);
+            $social_videos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            error_log("Videos error: " . $e->getMessage());
+        }
+    }
+
+    // Video delete
+    if (isset($_GET['delete_video']) && $has_video_table) {
+        try {
+            $stmt = $db->prepare("DELETE FROM bio_social_videos WHERE id = ? AND user_id = ?");
+            $stmt->execute([(int)$_GET['delete_video'], $user_id]);
+            header('Location: biolink.php');
+            exit;
+        } catch (Exception $e) {
+            $error = 'Video delete failed';
+        }
+    }
+
+    // Video add
+    if (isset($_POST['add_video']) && $has_video_table) {
+        $platform = $_POST['video_platform'] ?? '';
+        $url = trim($_POST['video_url'] ?? '');
+        $title = $_POST['video_title'] ?? '';
+        $desc = $_POST['video_description'] ?? '';
+        $autoplay = isset($_POST['autoplay']) ? 1 : 0;
+
+        if (!empty($url)) {
+            $embed = '';
+            $thumb = '';
+
+            switch($platform) {
+                case 'youtube':
+                    if (preg_match('/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/)([^&?]+)/', $url, $m)) {
+                        $vid = $m[1];
+                        $ap = $autoplay ? '1' : '0';
+                        $embed = '<iframe width="560" height="315" src="https://www.youtube.com/embed/'.$vid.'?autoplay='.$ap.'" frameborder="0" allowfullscreen></iframe>';
+                        $thumb = 'https://img.youtube.com/vi/'.$vid.'/maxresdefault.jpg';
+                    }
+                    break;
+                case 'facebook':
+                    $embed = '<iframe src="https://www.facebook.com/plugins/video.php?href='.urlencode($url).'" width="560" height="315" frameborder="0" allowfullscreen></iframe>';
+                    break;
+                case 'instagram':
+                    $embed = '<iframe src="'.$url.'embed" width="400" height="480" frameborder="0"></iframe>';
+                    break;
+                case 'tiktok':
+                    if (preg_match('/video\\/(\\d+)/', $url, $m)) {
+                        $embed = '<iframe src="https://www.tiktok.com/embed/'.$m[1].'" width="340" height="700" frameborder="0"></iframe>';
+                    }
+                    break;
+                case 'vimeo':
+                    if (preg_match('/vimeo\\.com\\/(\\d+)/', $url, $m)) {
+                        $embed = '<iframe src="https://player.vimeo.com/video/'.$m[1].'?autoplay='.$autoplay.'" width="640" height="360" frameborder="0" allowfullscreen></iframe>';
+                    }
+                    break;
+                case 'dailymotion':
+                    if (preg_match('/dailymotion\\.com\\/video\\/([^_]+)/', $url, $m)) {
+                        $embed = '<iframe src="https://www.dailymotion.com/embed/video/'.$m[1].'?autoplay='.$autoplay.'" width="640" height="360" frameborder="0" allowfullscreen></iframe>';
+                    }
+                    break;
+            }
+
+            if ($embed) {
+                $stmt = $db->prepare("SELECT COALESCE(MAX(display_order), 0)+1 FROM bio_social_videos WHERE user_id = ?");
+                $stmt->execute([$user_id]);
+                $order = $stmt->fetchColumn();
+
+                $stmt = $db->prepare("INSERT INTO bio_social_videos (user_id, platform, video_url, embed_code, title, description, thumbnail_url, display_order, autoplay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$user_id, $platform, $url, $embed, $title, $desc, $thumb, $order, $autoplay]);
+                $success = 'Video added successfully!';
+                header('Location: biolink.php');
+                exit;
+            } else {
+                $error = 'Invalid video URL format';
+            }
+        }
+    }
+
+    // ===  IMAGE CROP SAVE ===
+    if (isset($_POST['save_crop'])) {
+        $image_id = (int)$_POST['image_id'];
+        $crop_x = (int)$_POST['crop_x'];
+        $crop_y = (int)$_POST['crop_y'];
+        $crop_width = (int)$_POST['crop_width'];
+        $crop_height = (int)$_POST['crop_height'];
+
+        try {
+            $stmt = $db->query("SHOW COLUMNS FROM bio_gallery LIKE 'crop_%'");
+            if ($stmt->rowCount() === 0) {
+                // Auto-create crop columns
+                $db->exec("ALTER TABLE bio_gallery ADD COLUMN crop_x INT DEFAULT 0");
+                $db->exec("ALTER TABLE bio_gallery ADD COLUMN crop_y INT DEFAULT 0");
+                $db->exec("ALTER TABLE bio_gallery ADD COLUMN crop_width INT DEFAULT 0");
+                $db->exec("ALTER TABLE bio_gallery ADD COLUMN crop_height INT DEFAULT 0");
+            }
+
+            $stmt = $db->prepare("UPDATE bio_gallery SET crop_x = ?, crop_y = ?, crop_width = ?, crop_height = ? WHERE id = ? AND user_id = ?");
+            $stmt->execute([$crop_x, $crop_y, $crop_width, $crop_height, $image_id, $user_id]);
+            $success = '✅ Image cropped successfully!';
+
+            // Refresh gallery
+            $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
+            $stmt->execute([$user_id]);
+            $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        } catch (Exception $e) {
+            $error = 'Crop failed: ' . $e->getMessage();
+            error_log("Crop error: " . $e->getMessage());
+        }
+    }
+
+
     // Get gallery images
     $gallery_images = [];
     try {
@@ -108,7 +240,7 @@ try {
                         continue;
                     }
                     
-                    if ($files['size'][$i] > 12 * 1024 * 1024) {
+                    if ($files['size'][$i] > 12 * 1024 * 1024) {  // ✅ 12MB LIMIT
                         $errors[] = 'File too large: ' . $files['name'][$i];
                         continue;
                     }
@@ -704,11 +836,182 @@ try {
             .navbar h1 { font-size: 20px; }
             .navbar nav { flex-direction: column; gap: 8px; }
         }
+
+        /* ✅ VIDEO STYLES */
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .video-item {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+        .video-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        .video-embed {
+            position: relative;
+            padding-bottom: 56.25%;
+            height: 0;
+            background: #000;
+        }
+        .video-embed iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .video-info {
+            padding: 15px;
+        }
+        .video-info h4 {
+            margin: 0 0 10px 0;
+            color: #1e293b;
+            font-size: 16px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .share-btn, .copy-btn {
+            padding: 6px 12px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .share-btn:hover, .copy-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+        .copy-btn {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+        }
+        .copy-btn:hover {
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        .delete-video-btn {
+            color: #ef4444;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 600;
+            transition: color 0.3s;
+        }
+        .delete-video-btn:hover {
+            color: #dc2626;
+        }
+
+        /* ✅ CROP MODAL */
+        .crop-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .crop-container {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 90%;
+            max-height: 90%;
+            overflow: auto;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+        }
+        .crop-canvas {
+            max-width: 100%;
+            border: 3px solid #6366f1;
+            border-radius: 12px;
+            cursor: crosshair;
+            display: block;
+        }
+        .crop-buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        .btn-crop-save {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        .btn-crop-save:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+        }
+        .btn-crop-cancel {
+            padding: 12px 30px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        .btn-crop-cancel:hover {
+            background: #dc2626;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 10001;
+            animation: slideIn 0.3s;
+            font-weight: 600;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(400px); opacity: 0; }
+        }
     </style>
 </head>
 <body>
     <div class="navbar">
-        <h1>ðŸ”— <?= SITE_NAME ?></h1>
+        <h1>🔗 <?= SITE_NAME ?></h1>
         <nav>
             <a href="dashboard.php">Dashboard</a>
             <a href="biolink.php">Bio Link</a>
@@ -717,6 +1020,73 @@ try {
     </div>
 
     <div class="container">
+
+        <!-- ✅ SOCIAL VIDEOS SECTION -->
+        <?php if ($has_video_table): ?>
+        <div class="card" style="animation-delay: 0.1s;">
+            <h2><i class="fas fa-video"></i> Social Videos</h2>
+            <p style="color:#64748b;margin-bottom:20px;">📺 YouTube · Facebook · Instagram · TikTok · Vimeo · Dailymotion</p>
+
+            <?php if (!empty($social_videos)): ?>
+            <div class="video-grid">
+                <?php foreach ($social_videos as $video): ?>
+                <div class="video-item">
+                    <div class="video-embed"><?= $video['embed_code'] ?></div>
+                    <div class="video-info">
+                        <h4><?= htmlspecialchars($video['title'] ?: 'Untitled Video') ?></h4>
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px;">
+                            <span class="badge"><?= ucfirst($video['platform']) ?></span>
+                            <button onclick="shareVideo('<?= htmlspecialchars(addslashes($video['video_url'])) ?>', '<?= htmlspecialchars(addslashes($video['title'] ?: 'Video')) ?>')" class="share-btn">
+                                <i class="fas fa-share-alt"></i> Share
+                            </button>
+                            <button onclick="copyLink('<?= htmlspecialchars(addslashes($video['video_url'])) ?>')" class="copy-btn">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
+                            <a href="?delete_video=<?= $video['id'] ?>" onclick="return confirm('Delete this video?')" class="delete-video-btn">
+                                <i class="fas fa-trash"></i> Delete
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+
+            <form method="POST" style="margin-top: 30px; border-top: 2px solid #e2e8f0; padding-top: 30px;">
+                <h3 style="margin-bottom: 20px; color: #1e293b;"><i class="fas fa-plus-circle"></i> Add New Video</h3>
+                <div class="form-group">
+                    <label><i class="fas fa-video"></i> Platform</label>
+                    <select name="video_platform" required style="width:100%; padding:14px; border:2px solid #e2e8f0; border-radius:12px; font-size:14px; background: white;">
+                        <option value="youtube">YouTube</option>
+                        <option value="facebook">Facebook</option>
+                        <option value="instagram">Instagram</option>
+                        <option value="tiktok">TikTok</option>
+                        <option value="vimeo">Vimeo</option>
+                        <option value="dailymotion">Dailymotion</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-link"></i> Video URL</label>
+                    <input type="url" name="video_url" placeholder="https://youtube.com/watch?v=..." required>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-heading"></i> Title (Optional)</label>
+                    <input type="text" name="video_title" placeholder="Video title">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-align-left"></i> Description (Optional)</label>
+                    <textarea name="video_description" placeholder="Video description"></textarea>
+                </div>
+                <div class="toggle-group">
+                    <input type="checkbox" name="autoplay" id="autoplay">
+                    <label for="autoplay">Enable autoplay</label>
+                </div>
+                <button type="submit" name="add_video" class="btn-primary"><i class="fas fa-plus"></i> Add Video</button>
+            </form>
+        </div>
+        <?php endif; ?>
+
+
         <!-- Gallery Section -->
         <div class="card">
             <h2><i class="fas fa-images"></i> Image Gallery (<?= count($gallery_images) ?>/6)</h2>
@@ -777,7 +1147,7 @@ try {
             <?php endif; ?>
             
             <div class="info-box">
-                <strong>âœ¨ Your bio link URL:</strong><br>
+                <strong>✨ Your bio link URL:</strong><br>
                 <a href="<?= SITE_URL ?>/bio/<?= htmlspecialchars($current_user['username']) ?>" target="_blank">
                     <?= SITE_URL ?>/bio/<strong><?= htmlspecialchars($current_user['username']) ?></strong>
                 </a>
@@ -827,7 +1197,7 @@ try {
                 </div>
                 
                 <h2 style="margin-top: 40px; margin-bottom: 24px;"><i class="fas fa-globe"></i> Social Media Links (29 Platforms)</h2>
-                <p style="color: #64748b; margin-bottom: 20px;">ðŸ’¡ <strong>Tip:</strong> Uncheck "Show on bio page" to hide any platform!</p>
+                <p style="color: #64748b; margin-bottom: 20px;">💡 <strong>Tip:</strong> Uncheck "Show on bio page" to hide any platform!</p>
                 
                 <div class="social-grid">
                 <?php
@@ -916,6 +1286,186 @@ try {
             }
         });
     </script>
+
+
+    <!-- ✅ CROP TOOL + VIDEO SHARE FUNCTIONS -->
+    <script>
+    // === IMAGE CROP TOOL WITH SAVE ===
+    let cropData = { x: 0, y: 0, width: 0, height: 0, imageId: 0 };
+
+    document.querySelectorAll('.gallery-item img').forEach(img => {
+        // Add hint on hover
+        img.title = 'Double-click to crop this image';
+        img.style.cursor = 'pointer';
+
+        img.addEventListener('dblclick', function() {
+            const imgSrc = this.src;
+            const imgId = this.closest('.gallery-item').dataset.imageId || 0;
+
+            const modal = document.createElement('div');
+            modal.className = 'crop-modal';
+            modal.innerHTML = `
+                <div class="crop-container">
+                    <h3 style="margin-bottom:20px; text-align:center;"><i class="fas fa-crop"></i> Crop Image</h3>
+                    <p style="color:#64748b;margin-bottom:15px; text-align:center;">💡 Click and drag to select crop area</p>
+                    <canvas id="cropCanvas" class="crop-canvas"></canvas>
+                    <div class="crop-buttons">
+                        <button onclick="saveCropToServer()" class="btn-crop-save">
+                            <i class="fas fa-check"></i> Save Crop
+                        </button>
+                        <button onclick="this.closest('.crop-modal').remove()" class="btn-crop-cancel">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            const canvas = document.getElementById('cropCanvas');
+            const ctx = canvas.getContext('2d');
+            const image = new Image();
+            image.crossOrigin = 'anonymous';
+            image.src = imgSrc;
+
+            image.onload = function() {
+                const maxWidth = window.innerWidth * 0.8;
+                const maxHeight = window.innerHeight * 0.6;
+                let width = image.width;
+                let height = image.height;
+
+                if (width > maxWidth) {
+                    height = (height * maxWidth) / width;
+                    width = maxWidth;
+                }
+                if (height > maxHeight) {
+                    width = (width * maxHeight) / height;
+                    height = maxHeight;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(image, 0, 0, width, height);
+
+                let isDrawing = false;
+                let startX, startY;
+
+                canvas.addEventListener('mousedown', e => {
+                    isDrawing = true;
+                    const rect = canvas.getBoundingClientRect();
+                    startX = e.clientX - rect.left;
+                    startY = e.clientY - rect.top;
+                });
+
+                canvas.addEventListener('mousemove', e => {
+                    if (!isDrawing) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const currentX = e.clientX - rect.left;
+                    const currentY = e.clientY - rect.top;
+
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(image, 0, 0, width, height);
+
+                    // Draw selection rectangle
+                    ctx.strokeStyle = '#6366f1';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(startX, startY, currentX - startX, currentY - startY);
+                    ctx.fillStyle = 'rgba(99, 102, 241, 0.1)';
+                    ctx.fillRect(startX, startY, currentX - startX, currentY - startY);
+
+                    // Store crop data
+                    cropData = {
+                        x: Math.round(startX),
+                        y: Math.round(startY),
+                        width: Math.round(currentX - startX),
+                        height: Math.round(currentY - startY),
+                        imageId: imgId
+                    };
+                });
+
+                canvas.addEventListener('mouseup', () => {
+                    isDrawing = false;
+                });
+            };
+        });
+    });
+
+    // Add imageId to gallery items
+    document.querySelectorAll('.gallery-item').forEach((item, index) => {
+        const deleteLink = item.querySelector('a[href*="delete_gallery"]');
+        if (deleteLink) {
+            const id = new URLSearchParams(deleteLink.search).get('delete_gallery');
+            item.dataset.imageId = id;
+        }
+    });
+
+    // Save crop to server
+    function saveCropToServer() {
+        if (cropData.width === 0 || cropData.height === 0) {
+            showNotification('⚠️ Please select a crop area first!', '#f59e0b');
+            return;
+        }
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.innerHTML = `
+            <input type="hidden" name="save_crop" value="1">
+            <input type="hidden" name="image_id" value="${cropData.imageId}">
+            <input type="hidden" name="crop_x" value="${cropData.x}">
+            <input type="hidden" name="crop_y" value="${cropData.y}">
+            <input type="hidden" name="crop_width" value="${cropData.width}">
+            <input type="hidden" name="crop_height" value="${cropData.height}">
+        `;
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    // ===  VIDEO SHARE FUNCTIONS ===
+    function shareVideo(url, title) {
+        if (navigator.share) {
+            navigator.share({
+                title: title,
+                text: 'Check out this video: ' + title,
+                url: url
+            }).then(() => {
+                showNotification('✅ Shared successfully!', '#10b981');
+            }).catch(err => {
+                if (err.name !== 'AbortError') {
+                    copyLink(url);
+                }
+            });
+        } else {
+            copyLink(url);
+        }
+    }
+
+    function copyLink(url) {
+        navigator.clipboard.writeText(url).then(() => {
+            showNotification('✅ Link copied to clipboard!', '#10b981');
+        }).catch(err => {
+            // Fallback for older browsers
+            const temp = document.createElement('textarea');
+            temp.value = url;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            showNotification('✅ Link copied!', '#10b981');
+        });
+    }
+
+    // Show notification
+    function showNotification(message, color) {
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.innerHTML = message;
+        notification.style.background = color;
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s';
+            setTimeout(() => notification.remove(), 300);
+        }, 2500);
+    }
+    </script>
 </body>
 </html>
-
