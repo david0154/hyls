@@ -1,5 +1,5 @@
 <?php
-// bio.php - Bio link display page with ALL 29 platforms + FIXED ICONS
+// bio.php - Bio link display page with FIXED blocking and ad display
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
@@ -64,6 +64,7 @@ try {
         $settings = [];
     }
 
+    // Get active advertisement
     $ad_stmt = $db->prepare("SELECT * FROM advertisements WHERE is_active = 1 ORDER BY position ASC LIMIT 1");
     if ($ad_stmt) {
         $ad_stmt->execute();
@@ -97,7 +98,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
     <meta property="og:title" content="<?= htmlspecialchars($bio['display_name'] ?? $bio['username']) ?>">
     <meta property="og:description" content="<?= htmlspecialchars(substr($bio['bio'] ?? '', 0, 160)) ?>">
     <link rel="icon" type="image/x-icon" href="<?= htmlspecialchars(SITE_URL) ?>/assets/favicon.ico">
-    <!-- Updated to Font Awesome 6.5.1 for better icon support -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <?php if (!empty($settings['ga_tracking_id'])): ?>
     <script async src="https://www.googletagmanager.com/gtag/js?id=<?= htmlspecialchars($settings['ga_tracking_id']) ?>"></script>
@@ -137,7 +137,45 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
         }
         .container { max-width: 700px; width: 100%; z-index: 1; }
         
-        /* Cover Image */
+        /* Advertisement Styles */
+        .ad-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border: 2px solid rgba(255, 193, 7, 0.5);
+            text-align: center;
+        }
+        .ad-container .ad-label {
+            font-size: 10px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        .ad-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        .ad-container a {
+            display: inline-block;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #ffc107, #ff9800);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 700;
+            transition: all 0.3s;
+        }
+        .ad-container a:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 193, 7, 0.4);
+        }
+        
         .cover-image {
             width: 100%;
             height: 200px;
@@ -230,7 +268,22 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             border-left: 4px solid <?= htmlspecialchars($bio['theme_color']) ?>;
         }
         
-        /* Gallery */
+        /* Blocked Link Message */
+        .blocked-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 2px solid #ef4444;
+            color: #7f1d1d;
+            padding: 12px 20px;
+            border-radius: 12px;
+            margin-top: 15px;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+        }
+        
         .gallery-section {
             margin: 25px 0;
         }
@@ -311,7 +364,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             filter: brightness(1.1);
         }
         
-        /* Custom text icons for platforms without Font Awesome icons */
         .social-btn .custom-icon {
             font-size: 16px;
             font-weight: 900;
@@ -388,6 +440,28 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
 </head>
 <body>
     <div class="container">
+        <?php if ($ad): ?>
+        <div class="ad-container">
+            <div class="ad-label">Advertisement</div>
+            <?php if (!empty($ad['image_url'])): ?>
+                <img src="<?= htmlspecialchars($ad['image_url']) ?>" alt="<?= htmlspecialchars($ad['title']) ?>">
+            <?php endif; ?>
+            <div style="margin: 10px 0; font-weight: 600; color: #333;">
+                <?= htmlspecialchars($ad['title']) ?>
+            </div>
+            <?php if (!empty($ad['description'])): ?>
+                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">
+                    <?= htmlspecialchars($ad['description']) ?>
+                </p>
+            <?php endif; ?>
+            <?php if (!empty($ad['link_url'])): ?>
+                <a href="<?= htmlspecialchars($ad['link_url']) ?>" target="_blank" rel="noopener">
+                    Learn More <i class="fas fa-arrow-right"></i>
+                </a>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+        
         <div class="profile-card">
             <?php if (!empty($bio['cover_image'])): ?>
             <img src="<?= htmlspecialchars(SITE_URL) ?>/<?= htmlspecialchars($bio['cover_image']) ?>" alt="Cover" class="cover-image" loading="lazy">
@@ -427,12 +501,11 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             <?php endif; ?>
             
             <?php
-            // ALL 29 PLATFORMS WITH PROPER ICONS
             $socials = [
                 'facebook' => ['icon' => 'fab fa-facebook-f', 'text' => ''],
                 'instagram' => ['icon' => 'fab fa-instagram', 'text' => ''],
                 'twitter' => ['icon' => 'fab fa-x-twitter', 'text' => ''],
-                'threads' => ['icon' => 'fab fa-threads', 'text' => '@'],  // Threads has icon in FA 6.5+
+                'threads' => ['icon' => 'fab fa-threads', 'text' => '@'],
                 'tiktok' => ['icon' => 'fab fa-tiktok', 'text' => ''],
                 'youtube' => ['icon' => 'fab fa-youtube', 'text' => ''],
                 'linkedin' => ['icon' => 'fab fa-linkedin-in', 'text' => ''],
@@ -448,22 +521,26 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
                 'medium' => ['icon' => 'fab fa-medium', 'text' => ''],
                 'substack' => ['icon' => 'fas fa-newspaper', 'text' => ''],
                 'patreon' => ['icon' => 'fab fa-patreon', 'text' => ''],
-                'onlyfans' => ['icon' => '', 'text' => 'OF'],  // Custom text
+                'onlyfans' => ['icon' => '', 'text' => 'OF'],
                 'bluesky' => ['icon' => 'fas fa-cloud', 'text' => ''],
                 'mastodon' => ['icon' => 'fab fa-mastodon', 'text' => ''],
                 'line' => ['icon' => 'fab fa-line', 'text' => ''],
                 'cashapp' => ['icon' => 'fas fa-dollar-sign', 'text' => ''],
-                'venmo' => ['icon' => '', 'text' => 'V'],  // Custom text
+                'venmo' => ['icon' => '', 'text' => 'V'],
                 'paypal' => ['icon' => 'fab fa-paypal', 'text' => ''],
                 'website' => ['icon' => 'fas fa-globe', 'text' => '']
             ];
             
             $has_socials = false;
+            $has_blocked = false;
             foreach ($socials as $platform => $data) {
-                $enabled = isset($bio[$platform . '_enabled']) ? ($bio[$platform . '_enabled'] == 1) : true;
-                if (!empty($bio[$platform]) && $enabled) {
-                    $has_socials = true;
-                    break;
+                if (!empty($bio[$platform])) {
+                    $enabled = isset($bio[$platform . '_enabled']) ? ($bio[$platform . '_enabled'] == 1) : true;
+                    if ($enabled) {
+                        $has_socials = true;
+                    } else {
+                        $has_blocked = true;
+                    }
                 }
             }
             
@@ -474,25 +551,34 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             <div class="social-links">
                 <?php
                 foreach ($socials as $platform => $data) {
-                    $enabled = isset($bio[$platform . '_enabled']) ? ($bio[$platform . '_enabled'] == 1) : true;
                     $url = $bio[$platform] ?? '';
                     
-                    if (!empty($url) && $enabled) {
-                        if ($platform === 'website' && !preg_match('/^https?:\/\//i', $url)) {
-                            $url = 'https://' . $url;
-                        }
+                    if (!empty($url)) {
+                        $enabled = isset($bio[$platform . '_enabled']) ? ($bio[$platform . '_enabled'] == 1) : true;
                         
-                        $icon_html = '';
-                        if (!empty($data['icon'])) {
-                            $icon_html = '<i class="' . htmlspecialchars($data['icon']) . '"></i>';
-                        } else if (!empty($data['text'])) {
-                            $icon_html = '<span class="custom-icon">' . htmlspecialchars($data['text']) . '</span>';
+                        if ($enabled) {
+                            if ($platform === 'website' && !preg_match('/^https?:\/\//i', $url)) {
+                                $url = 'https://' . $url;
+                            }
+                            
+                            $icon_html = '';
+                            if (!empty($data['icon'])) {
+                                $icon_html = '<i class="' . htmlspecialchars($data['icon']) . '"></i>';
+                            } else if (!empty($data['text'])) {
+                                $icon_html = '<span class="custom-icon">' . htmlspecialchars($data['text']) . '</span>';
+                            }
+                            
+                            echo '<a href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener" class="social-btn" title="' . ucfirst($platform) . '">' . $icon_html . '</a>';
                         }
-                        
-                        echo '<a href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener" class="social-btn" title="' . ucfirst($platform) . '">' . $icon_html . '</a>';
                     }
                 }
                 ?>
+            </div>
+            <?php endif; ?>
+            
+            <?php if ($has_blocked): ?>
+            <div class="blocked-message">
+                <i class="fas fa-ban"></i> Some social links are currently hidden by the owner
             </div>
             <?php endif; ?>
             
