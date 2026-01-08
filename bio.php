@@ -1,5 +1,5 @@
 <?php
-// bio.php - Bio link display page with FIXED link blocking and ad display
+// bio.php - Bio link display page with VIDEOS, gallery, and ad display
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
@@ -12,6 +12,7 @@ $bio = null;
 $ad = null;
 $settings = [];
 $gallery_images = [];
+$social_videos = []; // NEW: For video embeds
 
 try {
     if (!class_exists('Database')) {
@@ -48,6 +49,30 @@ try {
         $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
         error_log("Gallery error: " . $e->getMessage());
+    }
+    
+    // NEW: Get social media videos
+    try {
+        // First, get bio_profile_id from user_id
+        $stmt = $db->prepare("SELECT id FROM bio_profiles WHERE user_id = ?");
+        $stmt->execute([$bio['user_id']]);
+        $profile = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($profile) {
+            $stmt = $db->prepare("SELECT * FROM bio_social_videos WHERE bio_profile_id = ? ORDER BY display_order ASC");
+            $stmt->execute([$profile['id']]);
+            $social_videos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Update views for each video
+            if (!empty($social_videos)) {
+                $update_stmt = $db->prepare("UPDATE bio_social_videos SET views = views + 1 WHERE id = ?");
+                foreach ($social_videos as $video) {
+                    $update_stmt->execute([$video['id']]);
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Video error: " . $e->getMessage());
     }
 
     try {
@@ -228,6 +253,87 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             padding: 20px;
             border-radius: 15px;
             border-left: 4px solid <?= htmlspecialchars($bio['theme_color']) ?>;
+        }
+        
+        /* NEW: Social Media Videos Section */
+        .videos-section {
+            margin: 30px 0;
+        }
+        .videos-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            margin-top: 15px;
+        }
+        .video-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            border: 2px solid <?= htmlspecialchars($bio['theme_color']) ?>;
+        }
+        .video-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .video-platform-icon {
+            font-size: 24px;
+            color: <?= htmlspecialchars($bio['theme_color']) ?>;
+        }
+        .video-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1e293b;
+            flex: 1;
+        }
+        .video-badge {
+            background: <?= htmlspecialchars($bio['theme_color']) ?>;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .video-embed {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            height: 0;
+            overflow: hidden;
+            border-radius: 12px;
+            background: #000;
+            margin: 12px 0;
+        }
+        .video-embed iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .video-description {
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-top: 12px;
+        }
+        .video-stats {
+            display: flex;
+            gap: 15px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            font-size: 13px;
+            color: #94a3b8;
+        }
+        .video-stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
         
         /* Advertisement */
@@ -454,11 +560,13 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             .social-btn { width: 50px; height: 50px; font-size: 20px; }
             .gallery-grid { grid-template-columns: repeat(2, 1fr); }
             .cover-image { height: 150px; }
+            .video-embed { padding-bottom: 75%; } /* Adjust for mobile */
         }
         @media (max-width: 480px) {
             .profile-card { padding: 25px 18px; }
             .display-name { font-size: 22px; }
             .bio-text { font-size: 14px; padding: 15px; }
+            .video-card { padding: 15px; }
         }
     </style>
 </head>
@@ -501,6 +609,63 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
                 <a href="<?= htmlspecialchars($ad['url']) ?>" target="_blank" rel="noopener sponsored" class="ad-cta">
                     <?= htmlspecialchars($ad['cta_text'] ?? 'Visit Now') ?>
                 </a>
+            </div>
+            <?php endif; ?>
+            
+            <?php // NEW: Display Social Media Videos ?>
+            <?php if (!empty($social_videos)): ?>
+            <div class="divider"></div>
+            <div class="section-title"><i class="fas fa-video"></i> Latest Videos</div>
+            <div class="videos-section">
+                <div class="videos-grid">
+                    <?php 
+                    $platform_icons = [
+                        'youtube' => 'fab fa-youtube',
+                        'facebook' => 'fab fa-facebook',
+                        'instagram' => 'fab fa-instagram',
+                        'tiktok' => 'fab fa-tiktok',
+                        'vimeo' => 'fab fa-vimeo',
+                        'dailymotion' => 'fas fa-play-circle',
+                        'twitter' => 'fab fa-x-twitter',
+                        'twitch' => 'fab fa-twitch'
+                    ];
+                    
+                    foreach ($social_videos as $video): 
+                    ?>
+                    <div class="video-card" data-platform="<?= htmlspecialchars($video['platform']) ?>">
+                        <?php if (!empty($video['title']) || !empty($video['platform'])): ?>
+                        <div class="video-card-header">
+                            <i class="video-platform-icon <?= $platform_icons[$video['platform']] ?? 'fas fa-video' ?>"></i>
+                            <?php if (!empty($video['title'])): ?>
+                            <div class="video-title"><?= htmlspecialchars($video['title']) ?></div>
+                            <?php endif; ?>
+                            <?php if ($video['autoplay']): ?>
+                            <span class="video-badge">Autoplay</span>
+                            <?php endif; ?>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <div class="video-embed">
+                            <?= $video['embed_code'] ?>
+                        </div>
+                        
+                        <?php if (!empty($video['description'])): ?>
+                        <div class="video-description"><?= nl2br(htmlspecialchars($video['description'])) ?></div>
+                        <?php endif; ?>
+                        
+                        <div class="video-stats">
+                            <div class="video-stat">
+                                <i class="fas fa-eye"></i>
+                                <span><?= number_format($video['views'] ?? 0) ?> views</span>
+                            </div>
+                            <div class="video-stat">
+                                <i class="<?= $platform_icons[$video['platform']] ?? 'fas fa-video' ?>"></i>
+                                <span><?= ucfirst($video['platform']) ?></span>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
             </div>
             <?php endif; ?>
             
