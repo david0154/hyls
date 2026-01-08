@@ -218,28 +218,70 @@ Then visit: `https://yourdomain.com/install.php?mode=migrate`
 
 ```
 hyls/
-├── admin/              # Admin panel files
-│   ├── index.php       # Admin dashboard
-│   ├── users.php       # User management
-│   └── settings.php    # System settings
-├── assets/             # CSS, JS, images
-├── includes/           # Core PHP classes
-│   ├── db.php          # Database class
-│   └── functions.php   # Helper functions
-├── uploads/            # User uploaded files
-│   ├── profiles/       # Profile pictures
-│   ├── bio/            # Bio images
-│   └── bio/gallery/    # Gallery images
-├── auth.php            # HypeChats OAuth handler
-├── google-auth.php     # Google OAuth handler
-├── login.php           # Login page
-├── dashboard.php       # User dashboard
-├── bio.php             # Bio link display
-├── edit_bio.php        # Bio link editor
-├── r.php               # Link redirect handler
-├── install.php         # Installation wizard
-├── update.php          # Auto-update script
-└── config.php          # Configuration file
+│
+├── 📁 admin/                    # Admin Panel
+│   ├── index.php               # Admin dashboard
+│   ├── users.php               # User management
+│   ├── links.php               # Link management
+│   ├── settings.php            # System settings
+│   ├── advertisements.php      # Ad management
+│   └── analytics.php           # Statistics & analytics
+│
+├── 📁 assets/                   # Static Resources
+│   ├── css/                    # Stylesheets
+│   ├── js/                     # JavaScript files
+│   ├── images/                 # Images & graphics
+│   └── favicon.ico             # Site favicon
+│
+├── 📁 docs/                     # Documentation
+│   ├── API.md                  # API documentation
+│   ├── INSTALLATION.md         # Installation guide
+│   └── FEATURES.md             # Feature list
+│
+├── 📁 includes/                 # Core PHP Classes
+│   ├── db.php                  # Database connection class
+│   ├── functions.php           # Helper functions
+│   ├── image_processor.php     # Image handling
+│   ├── mailer.php              # Email functionality
+│   └── video_embed.php         # Video embed handler
+│
+├── 📁 install/                  # Installation Files
+│   ├── install.php             # Installation wizard
+│   ├── database.sql            # Main database schema
+│  
+│   
+│  
+│
+├── 📁 uploads/                  # User Uploads (gitignored)
+│   ├── .gitkeep               # Preserve directory
+│   ├── bio/                    # Bio profile images
+│   │   ├── .gitkeep
+│   │   └── gallery/            # Gallery images
+│   └── qr/                     # QR code images
+│       └── .gitkeep
+│
+├── 📄 .htaccess                 # Apache Configuration
+├── 📄 .gitignore               # Git ignore rules
+│
+├── 📄 ad-page.php              # Advertisement Management
+├── 📄 auth.php                 # Authentication Handler
+├── 📄 bio.php                  # Public Bio Page Display
+├── 📄 biolink.php              # Bio Link Management (User Panel)
+├── 📄 config.sample.php        # Sample Configuration
+├── 📄 dashboard.php            # User Dashboard
+├── 📄 delete_link.php          # Link Deletion Handler
+├── 📄 edit_bio.php             # Bio Editing Interface
+├── 📄 google-auth.php          # Google OAuth Integration
+├── 📄 index.php                # Landing Page
+├── 📄 login.php                # Login Page
+├── 📄 logout.php               # Logout Handler
+├── 📄 r.php                    # URL Redirect Handler
+├── 📄 shorten.php              # URL Shortening API
+├── 📄 update.php               # Database Update Script
+│
+├── 📄 LICENSE                  # MIT License
+├── 📄 README.md                # Main documentation
+
 ```
 
 ## 🔒 Security Features
