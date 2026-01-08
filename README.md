@@ -1,62 +1,78 @@
-# 🔗 HYLS - Modern URL Shortener
+# 🔗 HYLS - URL Shortener & Bio Link Platform
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)
 ![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-orange.svg)
 
-**HYLS** is a powerful, modern, and feature-rich URL shortener with OAuth integration, analytics, and QR code generation.
+**HYLS** is a professional URL shortener and bio link platform with user authentication, analytics tracking, and customizable bio pages.
 
-## ✨ Features
+## ✨ Core Features
 
-### 🔐 Authentication & OAuth
-- **Google OAuth** - Sign in with Google account
-- **HypeChats OAuth** - Sign in with HypeChats account
-- **Email/Password Login** - Traditional authentication
-- **Profile Management** - Update profile pictures, settings
-- **Last Login Tracking** - Monitor user activity
+### 🔐 Authentication
+- Email/Password Login & Registration
+- Google OAuth Integration
+- HypeChats OAuth Integration
+- Profile Management
+- Last Login Tracking
 
-### 🔗 URL Management
-- **Custom Short URLs** - Create memorable short links
-- **Random Short Codes** - Auto-generate unique codes
-- **URL Analytics** - Track clicks, referrers, devices, locations
-- **QR Code Generation** - Automatic QR codes for all links
-- **Link Expiration** - Set expiry dates for temporary links
-- **Password Protection** - Secure links with passwords
-- **Link Categories** - Organize links with tags
+### 🔗 URL Shortening
+- Custom Short URLs
+- Random Short Code Generation
+- Click Tracking
+- Basic Analytics (clicks, timestamps)
+- Link Management Dashboard
+- Password Protection for Links
+- Link Expiration Dates
+- Link Banning System
 
-### 📊 Analytics Dashboard
-- **Click Tracking** - Real-time click statistics
-- **Geographic Data** - Country-based analytics
-- **Device Detection** - Desktop, mobile, tablet tracking
-- **Browser Analytics** - Track browser usage
-- **Referrer Tracking** - See where traffic comes from
-- **Time-based Stats** - Hourly, daily, weekly reports
+### 👤 Bio Link Pages
+- Custom Bio Pages (biolink feature)
+- 29 Social Platform Integrations:
+  - Facebook, Instagram, Twitter/X, TikTok, YouTube, LinkedIn
+  - GitHub, Discord, Twitch, Telegram, WhatsApp, Spotify
+  - Reddit, Snapchat, Pinterest, Medium, Patreon
+  - OnlyFans, Threads, Bluesky, Mastodon, LINE
+  - Cash App, Venmo, PayPal, Substack
+  - Website, Email, Phone
+- **Link Blocking System** - Enable/disable individual social links
+- Profile & Cover Image Upload
+- 6-Image Gallery Support
+- Theme Color Customization
+- View Counter
+- Custom Bio Text
+
+### 📊 Analytics
+- Click Tracking
+- IP Address Logging
+- User Agent Detection
+- Referrer Tracking
+- Country Detection (basic)
+- Timestamp Records
+
+### 📢 Advertisement System
+- Advertisement Management
+- Display Ads on Bio Pages
+- Position Control
+- Active/Inactive Toggle
+- Click-through URLs
 
 ### ⚙️ Admin Panel
-- **User Management** - Create, edit, delete users
-- **Link Management** - Moderate all shortened URLs
-- **System Settings** - Configure site-wide options
-- **SMTP Configuration** - Email settings with test functionality
-- **Google OAuth Settings** - Configure Google Sign-In
-- **Analytics Overview** - System-wide statistics
-- **Database Backup** - One-click backup and restore
+- User Management
+- Link Management
+- System Settings
+- SMTP Configuration
+- Google OAuth Settings
+- Advertisement Management
 
-### 🚀 Advanced Features
-- **One-Click Updates** - Auto-update from GitHub
-- **Database Migration** - Automatic schema updates
-- **QR Code API** - Generate QR codes programmatically
-- **Custom Domains** - Support for multiple domains
-- **Link Redirection** - 301/302 redirects
-- **API Access** - RESTful API for integrations
-- **Dark Mode UI** - Modern, responsive design
-- **Mobile Responsive** - Works on all devices
-
-### 📧 Email Features
-- **Welcome Emails** - Automated for new users
-- **SMTP Support** - Full SMTP configuration
-- **PHPMailer Integration** - Reliable email delivery
-- **Email Verification** - Optional email confirmation
-- **Fallback to mail()** - Works without SMTP
+### 🔧 Technical Features
+- One-Click Installation Wizard
+- Database Migration System
+- Auto-Update Database Schema
+- SMTP Email Support (PHPMailer ready)
+- Responsive Mobile Design
+- Modern UI with Animations
+- File Upload System
+- Session Management
 
 ## 📋 Requirements
 
@@ -64,13 +80,12 @@
 - **MySQL** 5.7 or higher (or MariaDB 10.2+)
 - **Apache/Nginx** with mod_rewrite
 - **Git** (for updates)
-- **Composer** (optional, for PHPMailer)
 
-### PHP Extensions
+### Required PHP Extensions
 - PDO
 - PDO_MySQL
 - cURL
-- GD (for QR codes)
+- GD (for image processing)
 - JSON
 - OpenSSL
 
@@ -97,18 +112,18 @@ location / {
 
 3. **Run the installer**
 
-Visit: `https://yourdomain.com/install/`
+Visit: `https://yourdomain.com/install.php`
 
 The installer will:
-- ✅ Check system requirements
-- ✅ Create database configuration
-- ✅ Set up database tables
-- ✅ Create admin account
-- ✅ Configure initial settings
+- Check system requirements
+- Create database configuration
+- Set up database tables
+- Create admin account
+- Configure initial settings
 
 4. **Configure OAuth (Optional)**
 
-Edit `config.php`:
+Edit `config.php` or use the admin panel:
 ```php
 // Google OAuth
 define('GOOGLE_CLIENT_ID', 'your_google_client_id');
@@ -119,9 +134,9 @@ define('APP_ID', 'your_hypechats_app_id');
 define('APP_SECRET', 'your_hypechats_app_secret');
 ```
 
-5. **Delete install folder** (Security)
+5. **Security: Delete installer** (after successful installation)
 ```bash
-rm -rf install/
+rm install.php
 ```
 
 ## 🔧 Configuration
@@ -129,18 +144,18 @@ rm -rf install/
 ### Google OAuth Setup
 
 1. Visit [Google Cloud Console](https://console.cloud.google.com/)
-2. Create new project or select existing
+2. Create new project
 3. Enable Google+ API
 4. Create OAuth 2.0 credentials
 5. Add authorized redirect URI: `https://yourdomain.com/google-auth.php`
-6. Copy Client ID and Secret to admin panel
+6. Add credentials to admin panel settings
 
 ### HypeChats OAuth Setup
 
-1. Visit [HypeChats Developer Portal](https://hypechats.com/developers)
+1. Visit HypeChats Developer Portal
 2. Create new application
 3. Set redirect URI: `https://yourdomain.com/auth.php`
-4. Copy App ID and App Secret to `config.php`
+4. Add App ID and Secret to `config.php`
 
 ### SMTP Configuration
 
@@ -148,31 +163,23 @@ rm -rf install/
 2. Enter your SMTP details
 3. Test with "Send Test Email" button
 
-**Popular SMTP Providers:**
-
-**Gmail:**
+**Gmail SMTP:**
 - Host: `smtp.gmail.com`
 - Port: `587`
 - Encryption: TLS
 - Use App Password (not regular password)
 
-**SendGrid:**
-- Host: `smtp.sendgrid.net`
-- Port: `587`
-- Username: `apikey`
-- Password: Your API key
-
 ## 🔄 Updates
 
-### One-Click Update
+### Database Migration
 
-Visit: `https://yourdomain.com/update.php`
+When updating, visit: `https://yourdomain.com/install.php?mode=migrate`
 
 This will:
-- ✅ Fetch latest changes from GitHub
-- ✅ Run database migrations
-- ✅ Update all files
-- ✅ Show detailed change log
+- Add missing database columns
+- Create new tables
+- Update schema without data loss
+- Safe to run multiple times
 
 ### Manual Update
 
@@ -181,204 +188,111 @@ cd /path/to/hyls
 git pull origin main
 ```
 
-Then visit: `https://yourdomain.com/install/migrate.php`
+Then run migration as shown above.
 
 ## 📚 Usage
 
 ### Creating Short Links
 
-1. **Dashboard** → Enter long URL
-2. **(Optional)** Customize short code
-3. **(Optional)** Add password protection
-4. **(Optional)** Set expiration date
-5. Click **"Shorten"**
+1. Login to your dashboard
+2. Enter long URL
+3. (Optional) Customize short code
+4. (Optional) Add password protection
+5. (Optional) Set expiration date
+6. Click "Shorten"
 
-### Viewing Analytics
+### Creating Bio Pages
 
-1. Go to **Dashboard**
-2. Click **"Stats"** on any link
-3. View detailed analytics:
-   - Total clicks
-   - Geographic distribution
-   - Device breakdown
-   - Browser statistics
-   - Referrer sources
+1. Go to "Edit Bio" in dashboard
+2. Set username (will be your bio URL)
+3. Add display name and bio
+4. Upload profile picture and cover image
+5. Add social media links (up to 29 platforms)
+6. Upload gallery images (up to 6)
+7. Customize theme color
+8. Share your bio: `https://yourdomain.com/bio.php?u=username`
 
-### QR Code Generation
+### Managing Links
 
-QR codes are automatically generated for all links.
-
-**Download:** Click QR icon on any link
-
-**API Endpoint:**
-```
-GET /qr.php?url=YOUR_SHORT_CODE
-```
-
-## 🛠️ API Documentation
-
-### Shorten URL
-
-```bash
-POST /api/shorten
-Content-Type: application/json
-
-{
-  "url": "https://example.com/very/long/url",
-  "custom": "mylink",
-  "password": "secret123"
-}
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "short_url": "https://yourdomain.com/mylink",
-  "qr_code": "https://yourdomain.com/qr.php?url=mylink"
-}
-```
-
-### Get Analytics
-
-```bash
-GET /api/stats?url=mylink
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "clicks": 142,
-  "countries": {...},
-  "devices": {...},
-  "browsers": {...}
-}
-```
+- **Enable/Disable Social Links**: Use toggle switches in bio editor
+- **Ban Links**: Mark links as banned in admin panel
+- **View Analytics**: Click "Stats" on any short link
+- **Delete Links**: Use delete button in dashboard
 
 ## 🗂️ Project Structure
 
 ```
 hyls/
-├── admin/              # Admin panel
-│   ├── index.php       # Dashboard
+├── admin/              # Admin panel files
+│   ├── index.php       # Admin dashboard
 │   ├── users.php       # User management
-│   ├── links.php       # Link management
 │   └── settings.php    # System settings
 ├── assets/             # CSS, JS, images
 ├── includes/           # Core PHP classes
 │   ├── db.php          # Database class
-│   ├── functions.php   # Helper functions
-│   └── mailer.php      # Email handler
-├── install/            # Installation wizard
-│   ├── index.php       # Installer
-│   └── migrate.php     # Database migrations
+│   └── functions.php   # Helper functions
+├── uploads/            # User uploaded files
+│   ├── profiles/       # Profile pictures
+│   └── bio/            # Bio images & gallery
 ├── auth.php            # HypeChats OAuth
 ├── google-auth.php     # Google OAuth
 ├── login.php           # Login page
 ├── dashboard.php       # User dashboard
-├── qr.php              # QR code generator
-├── update.php          # Auto-update script
+├── bio.php             # Bio link display
+├── edit_bio.php        # Bio editor
+├── r.php               # URL redirect handler
+├── shorten.php         # URL shortening logic
+├── install.php         # Installation wizard
 └── config.php          # Configuration
 ```
 
 ## 🔒 Security Features
 
-- ✅ **Password Hashing** - bcrypt for user passwords
-- ✅ **SQL Injection Protection** - Prepared statements
-- ✅ **XSS Prevention** - Input sanitization
-- ✅ **CSRF Protection** - Token validation
-- ✅ **Session Security** - Secure session handling
-- ✅ **OAuth 2.0** - Secure third-party authentication
-- ✅ **Rate Limiting** - Prevent abuse
-- ✅ **Link Password Protection** - Encrypted passwords
+- Password Hashing (bcrypt)
+- SQL Injection Protection (Prepared Statements)
+- XSS Prevention (Input Sanitization)
+- Session Security
+- OAuth 2.0 Authentication
+- Link Password Protection
+- Admin Panel Access Control
 
 ## 🎨 Customization
 
-### Changing Colors
+### Changing Theme Colors
 
-Edit CSS files in `assets/css/` to customize colors and themes.
+Each bio page has customizable theme colors set in the bio editor.
 
-### Custom Logo
+### Custom Branding
 
-Replace `assets/favicon.ico` and update `SITE_NAME` in `config.php`.
-
-### Custom Domain
-
-Update `SITE_URL` in `config.php`:
+Update `config.php`:
 ```php
-define('SITE_URL', 'https://your-domain.com');
+define('SITE_NAME', 'Your Brand');
+define('SITE_DESCRIPTION', 'Your Description');
+define('SITE_KEYWORDS', 'your, keywords');
 ```
 
 ## 🐛 Troubleshooting
 
-### Google OAuth Not Working
+### Issue: Bio Links Not Showing
+**Solution:** Run database migration at `install.php?mode=migrate`
 
-**Error:** `Column 'google_id' not found`
+### Issue: Blocked Links Still Clickable
+**Solution:** Ensure `{platform}_enabled` columns exist in `bio_links` table (run migration)
 
-**Solution:** Run database migration:
-```
-https://yourdomain.com/install/migrate.php
-```
+### Issue: Ads Not Displaying
+**Solution:** 
+1. Check advertisement is marked as "Active" in admin panel
+2. Verify `advertisements` table exists
+3. Clear browser cache
 
-### SMTP Emails Not Sending
-
-1. Check SMTP credentials
-2. Enable "Less secure apps" (Gmail)
-3. Use App Password (Gmail)
-4. Test with "Send Test Email" button
-
-### Update.php Not Working
-
-**Ensure:**
-- Git is installed
-- Repository is cloned (not downloaded ZIP)
-- Write permissions on files
-
-### QR Codes Not Generating
-
-**Check:**
-- GD extension is installed
-- `php -m | grep gd`
-- Write permissions on temp directory
-
-## 📦 Database Schema
-
-### Users Table
-```sql
-CREATE TABLE users (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  username VARCHAR(50) UNIQUE,
-  email VARCHAR(100) UNIQUE,
-  password VARCHAR(255) NULL,
-  google_id VARCHAR(255) NULL,
-  hypechats_id VARCHAR(255) NULL,
-  profile_picture TEXT,
-  email_verified TINYINT(1) DEFAULT 0,
-  is_admin TINYINT(1) DEFAULT 0,
-  created_at DATETIME,
-  updated_at DATETIME,
-  last_login DATETIME
-);
-```
-
-### Links Table
-```sql
-CREATE TABLE links (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  user_id INT,
-  original_url TEXT,
-  short_code VARCHAR(20) UNIQUE,
-  password VARCHAR(255),
-  expires_at DATETIME,
-  clicks INT DEFAULT 0,
-  created_at DATETIME
-);
-```
+### Issue: Upload Errors
+**Solution:**
+- Check folder permissions: `chmod 755 uploads/`
+- Verify PHP upload settings in `php.ini`
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please follow these steps:
+Contributions are welcome! Please:
 
 1. Fork the repository
 2. Create feature branch (`git checkout -b feature/AmazingFeature`)
@@ -400,21 +314,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [PHPMailer](https://github.com/PHPMailer/PHPMailer) - Email sending
 - [Font Awesome](https://fontawesome.com/) - Icons
-- [QR Code Generator](https://github.com/chillerlan/php-qrcode) - QR codes
 - [Google OAuth](https://developers.google.com/identity/protocols/oauth2) - Authentication
-- [HypeChats](https://hypechats.com/) - Social OAuth
 
 ## 📊 Stats
 
 ![GitHub stars](https://img.shields.io/github/stars/david0154/hyls?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/david0154/hyls?style=social)
 ![GitHub issues](https://img.shields.io/github/issues/david0154/hyls)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/david0154/hyls)
 
 ## 🔗 Links
 
-- **Live Demo:** [Coming Soon]
-- **Documentation:** [GitHub Wiki](https://github.com/david0154/hyls/wiki)
 - **Report Bug:** [GitHub Issues](https://github.com/david0154/hyls/issues)
 - **Request Feature:** [GitHub Issues](https://github.com/david0154/hyls/issues)
 
@@ -422,8 +331,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <p align="center">
   Made with ❤️ by <a href="https://github.com/david0154">David Studioz</a>
-</p>
-
-<p align="center">
-  <a href="#-hyls---modern-url-shortener">Back to Top ⬆️</a>
 </p>
