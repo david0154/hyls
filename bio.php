@@ -51,24 +51,17 @@ try {
         error_log("Gallery error: " . $e->getMessage());
     }
     
-    // NEW: Get social media videos
+    // FIXED: Get social media videos directly by user_id (matching biolink.php)
     try {
-        // First, get bio_profile_id from user_id
-        $stmt = $db->prepare("SELECT id FROM bio_profiles WHERE user_id = ?");
+        $stmt = $db->prepare("SELECT * FROM bio_social_videos WHERE user_id = ? ORDER BY display_order ASC");
         $stmt->execute([$bio['user_id']]);
-        $profile = $stmt->fetch(PDO::FETCH_ASSOC);
+        $social_videos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        if ($profile) {
-            $stmt = $db->prepare("SELECT * FROM bio_social_videos WHERE bio_profile_id = ? ORDER BY display_order ASC");
-            $stmt->execute([$profile['id']]);
-            $social_videos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
-            // Update views for each video
-            if (!empty($social_videos)) {
-                $update_stmt = $db->prepare("UPDATE bio_social_videos SET views = views + 1 WHERE id = ?");
-                foreach ($social_videos as $video) {
-                    $update_stmt->execute([$video['id']]);
-                }
+        // Update views for each video
+        if (!empty($social_videos)) {
+            $update_stmt = $db->prepare("UPDATE bio_social_videos SET views = views + 1 WHERE id = ?");
+            foreach ($social_videos as $video) {
+                $update_stmt->execute([$video['id']]);
             }
         }
     } catch (Exception $e) {
