@@ -16,23 +16,19 @@
 - **Google OAuth 2.0** - Sign in with Google account
 - **Email/Password Login** - Traditional authentication with bcrypt hashing
 - **Profile Management** - Update profile pictures, names, and settings
-- **Last Login Tracking** - Monitor user activity timestamps
 - **Session Security** - Secure session handling and timeout
-- **Password Reset** - Email-based password recovery
 - **SQL Injection Protection** - All queries use prepared statements
 - **XSS Prevention** - Input sanitization on all user data
 
 ### 🔗 URL Shortening
 - **Custom Short URLs** - Create memorable branded short links
 - **Random Short Codes** - Auto-generate unique 6-character codes
-- **Password Protection** - Secure links with passwords
-- **Link Expiration** - Set expiry dates for temporary links
 - **Link Editing** - Update destination URLs without changing short code
 - **Link Deletion** - Remove unwanted links instantly
 - **Link Banning** - Admin can ban/block malicious links with reasons
 - **Bulk Operations** - Manage multiple links at once
 - **Link Categories** - Organize links (coming soon)
-- **UTM Parameters** - Add tracking parameters
+
 
 ### 👤 Bio Link Pages (Linktree Alternative)
 - **Custom Bio Pages** - Create personalized landing pages at `/bio.php?u=username`
@@ -62,7 +58,7 @@
 - **Display Order** - Reorder social links (drag & drop coming)
 - **Mobile Optimized** - Perfect responsive design
 - **SEO Friendly** - Meta tags and Open Graph support
-- **QR Code Generation** - Auto-generate QR codes for bio pages
+
 
 ### 📊 Analytics & Tracking
 - **Real-time Click Tracking** - Monitor link performance live
@@ -76,14 +72,6 @@
 - **Link Performance** - Top performing links dashboard
 - **Unique vs Total Clicks** - Track unique visitors
 
-### 📱 QR Code Generator
-- **Auto QR Generation** - Generate QR codes for any short link
-- **Custom Size** - Adjustable QR code dimensions
-- **High Resolution** - Print-ready QR codes
-- **PNG Format** - Universal image format
-- **Download Option** - Right-click save QR codes
-- **Bio QR Codes** - Generate QR for bio pages
-- **Batch Generation** - Create QR codes in bulk
 
 ### 📹 Video Embed System
 - **Multiple Platforms** - Support for 6 major video platforms
@@ -118,8 +106,7 @@
 - **Advertisement Manager** - Create and manage ads
 - **Analytics Dashboard** - View detailed statistics
 - **Database Backup** - Manual backup functionality
-- **Activity Logs** - Track admin actions
-- **Bulk Actions** - Mass delete, ban, or modify
+
 
 ### 🚀 Advanced Features
 - **One-Click Updates** - Auto-update from GitHub (requires Git)
@@ -944,7 +931,7 @@ If you find HYLS useful, consider:
 ---
 
 <p align="center">
-  <b>Made with ❤️ by <a href="https://github.com/david0154">David Studioz</a></b>
+  <b>Made with ❤️ by <a href="https://github.com/david0154">David</a></b>
 </p>
 
 <p align="center">
