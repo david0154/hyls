@@ -1,5 +1,5 @@
 <?php
-// biolink.php - Bio link management page with ALL features + GALLERY
+// biolink.php - Bio link management page with ALL features
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
@@ -34,12 +34,17 @@ try {
     $stmt->execute([$user_id]);
     $bio = $stmt->fetch();
 
-    // Get gallery images
-    $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
-    $stmt->execute([$user_id]);
-    $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // NEW: Get gallery images
+    $gallery_images = [];
+    try {
+        $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
+        $stmt->execute([$user_id]);
+        $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        // Table doesn't exist yet, ignore
+    }
 
-    // Handle gallery delete
+    // NEW: Handle gallery delete
     if (isset($_GET['delete_gallery'])) {
         $image_id = (int)$_GET['delete_gallery'];
         
@@ -57,10 +62,14 @@ try {
             }
             
             $success = 'Image deleted successfully!';
+            // Refresh gallery
+            $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
+            $stmt->execute([$user_id]);
+            $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
     }
 
-    // Handle gallery upload
+    // NEW: Handle gallery upload
     if (isset($_FILES['gallery_images'])) {
         $uploaded_count = 0;
         $errors = [];
@@ -143,7 +152,7 @@ try {
         $social_data = [];
         foreach ($socials as $social) {
             $social_data[$social] = $_POST[$social] ?? '';
-            // FIX: Properly handle unchecked checkboxes
+            // FIX: Properly handle checkbox - isset() for checkboxes, not value
             $social_data[$social . '_enabled'] = isset($_POST[$social . '_enabled']) ? 1 : 0;
         }
         
@@ -197,9 +206,10 @@ try {
         
         if (empty($error)) {
             try {
-                // Build column list dynamically
+                // Build column list dynamically based on existing columns
                 $base_columns = ['username', 'display_name', 'bio', 'theme_color', 'profile_image'];
                 
+                // Add cover_image if column exists
                 $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE 'cover_image'");
                 if ($stmt->rowCount() > 0) {
                     $base_columns[] = 'cover_image';
@@ -207,6 +217,7 @@ try {
                 
                 $social_columns = [];
                 foreach ($socials as $social) {
+                    // Check if columns exist before adding
                     $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE '$social'");
                     if ($stmt->rowCount() > 0) {
                         $social_columns[] = $social;
@@ -217,7 +228,7 @@ try {
                 $all_columns = array_merge($base_columns, $social_columns);
                 
                 if ($bio) {
-                    // Update existing bio - FIX: Properly update all enabled states
+                    // Update existing bio - FIX: Properly pass enabled values
                     $set_parts = array_map(function($col) { return "$col = ?"; }, $all_columns);
                     $sql = "UPDATE bio_links SET " . implode(', ', $set_parts) . " WHERE user_id = ?";
                     
@@ -226,7 +237,7 @@ try {
                         $values[] = $cover_image;
                     }
                     
-                    // FIX: Add all social data including enabled states
+                    // FIX: Add values in correct order matching social_columns
                     foreach ($social_columns as $col) {
                         $values[] = $social_data[$col];
                     }
@@ -341,7 +352,7 @@ try {
             backdrop-filter: blur(20px);
             border-radius: 25px;
             padding: 40px;
-            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.25);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.25), 0 0 1px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.6);
             margin-bottom: 24px;
             border: 1px solid rgba(255, 255, 255, 0.7);
             animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -351,6 +362,20 @@ try {
         @keyframes slideUp {
             from { opacity: 0; transform: translateY(40px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+            animation: shimmer 3s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
         }
         .card h2 {
             color: #1e293b;
@@ -408,7 +433,7 @@ try {
         }
         .info-box a:hover { opacity: 0.8; }
         
-        /* GALLERY STYLES */
+        /* NEW: GALLERY STYLES */
         .gallery-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -655,11 +680,12 @@ try {
     </div>
 
     <div class="container">
-        <!-- Gallery Section (NEW) -->
+        <!-- NEW: Gallery Section -->
+        <?php if (!empty($gallery_images) || true): // Always show gallery section ?>
         <div class="card">
             <h2><i class="fas fa-images"></i> Image Gallery (<?= count($gallery_images) ?>/6)</h2>
             
-            <?php if ($success && !empty($gallery_images)): ?>
+            <?php if ($success && strpos($success, 'image') !== false): ?>
                 <div class="alert alert-success"><i class="fas fa-check-circle"></i> <?= htmlspecialchars($success) ?></div>
             <?php endif; ?>
             
@@ -702,12 +728,12 @@ try {
             </p>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
 
-        <!-- Profile & Social Media Section -->
         <div class="card">
             <h2><i class="fas fa-id-card"></i> Bio Link Settings</h2>
             
-            <?php if ($success && empty($gallery_images)): ?>
+            <?php if ($success && strpos($success, 'image') === false): ?>
                 <div class="alert alert-success"><i class="fas fa-check-circle"></i> <?= htmlspecialchars($success) ?></div>
             <?php endif; ?>
             
@@ -841,16 +867,6 @@ try {
         
         // Initialize
         updateColorValue();
-        
-        // Prevent accidental form submission when deleting gallery
-        document.querySelectorAll('.delete-btn').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                if (confirm('Are you sure you want to delete this image?')) {
-                    window.location.href = this.href;
-                }
-            });
-        });
     </script>
 </body>
 </html>
