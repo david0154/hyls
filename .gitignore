@@ -1,0 +1,93 @@
+# Configuration files - NEVER commit these
+config.php
+
+# User uploads - too large for git
+uploads/*
+!uploads/.gitkeep
+uploads/bio/*
+!uploads/bio/.gitkeep
+uploads/qr/*
+!uploads/qr/.gitkeep
+
+# Log files
+*.log
+error_log
+php_errors.log
+debug.log
+
+# System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*.swn
+*~
+.project
+.settings/
+.buildpath
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+
+# Composer dependencies
+/vendor/
+composer.lock
+composer.phar
+
+# Node modules (if using any JS build tools)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Cache directories
+cache/
+tmp/
+temp/
+
+# Database dumps
+*.sql.gz
+*.sql.bak
+*.sql.backup
+backup/
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon
+
+# Windows
+desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# PHP
+*.phpunit.result.cache
+.phpunit.cache
+
+# Sessions
+sessions/
+*.sess
