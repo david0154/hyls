@@ -108,7 +108,7 @@ try {
                         continue;
                     }
                     
-                    if ($files['size'][$i] > 5 * 1024 * 1024) {
+                    if ($files['size'][$i] > 12 * 1024 * 1024) {
                         $errors[] = 'File too large: ' . $files['name'][$i];
                         continue;
                     }
@@ -751,7 +751,7 @@ try {
             <?php if (count($gallery_images) < 6): ?>
             <form method="POST" enctype="multipart/form-data" style="margin-top: 15px;">
                 <div class="form-group">
-                    <label><i class="fas fa-upload"></i> Upload Images (Max 5MB each)</label>
+                    <label><i class="fas fa-upload"></i> Upload Images (Max 12MB each)</label>
                     <input type="file" name="gallery_images[]" accept="image/*" multiple required>
                 </div>
                 <button type="submit" class="btn-primary">
@@ -918,3 +918,4 @@ try {
     </script>
 </body>
 </html>
+
