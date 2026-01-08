@@ -1,5 +1,5 @@
 <?php
-// biolink.php - Bio link management page with ALL features
+// biolink.php - Bio link management page with ALL features + GALLERY
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
@@ -34,7 +34,98 @@ try {
     $stmt->execute([$user_id]);
     $bio = $stmt->fetch();
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Get gallery images
+    $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
+    $stmt->execute([$user_id]);
+    $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Handle gallery delete
+    if (isset($_GET['delete_gallery'])) {
+        $image_id = (int)$_GET['delete_gallery'];
+        
+        $stmt = $db->prepare("SELECT image_url FROM bio_gallery WHERE id = ? AND user_id = ?");
+        $stmt->execute([$image_id, $user_id]);
+        $image = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($image) {
+            $stmt = $db->prepare("DELETE FROM bio_gallery WHERE id = ? AND user_id = ?");
+            $stmt->execute([$image_id, $user_id]);
+            
+            $file_path = __DIR__ . $image['image_url'];
+            if (file_exists($file_path)) {
+                @unlink($file_path);
+            }
+            
+            $success = 'Image deleted successfully!';
+        }
+    }
+
+    // Handle gallery upload
+    if (isset($_FILES['gallery_images'])) {
+        $uploaded_count = 0;
+        $errors = [];
+        
+        $stmt = $db->prepare("SELECT COUNT(*) as count FROM bio_gallery WHERE user_id = ?");
+        $stmt->execute([$user_id]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $existing_count = $result['count'];
+        
+        $files = $_FILES['gallery_images'];
+        
+        if (!is_dir('uploads/bio/gallery')) {
+            mkdir('uploads/bio/gallery', 0755, true);
+        }
+        
+        for ($i = 0; $i < count($files['name']); $i++) {
+            if ($existing_count + $uploaded_count >= 6) {
+                $errors[] = "Maximum 6 images allowed";
+                break;
+            }
+            
+            if ($files['error'][$i] === UPLOAD_ERR_OK) {
+                $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+                $ext = strtolower(pathinfo($files['name'][$i], PATHINFO_EXTENSION));
+                
+                if (!in_array($ext, $allowed)) {
+                    $errors[] = 'Invalid file type: ' . $files['name'][$i];
+                    continue;
+                }
+                
+                if ($files['size'][$i] > 5 * 1024 * 1024) {
+                    $errors[] = 'File too large: ' . $files['name'][$i];
+                    continue;
+                }
+                
+                $new_filename = 'gallery_' . $user_id . '_' . time() . '_' . uniqid() . '.' . $ext;
+                $upload_path = 'uploads/bio/gallery/' . $new_filename;
+                
+                if (move_uploaded_file($files['tmp_name'][$i], $upload_path)) {
+                    $stmt = $db->prepare("SELECT COALESCE(MAX(image_order), 0) as max_order FROM bio_gallery WHERE user_id = ?");
+                    $stmt->execute([$user_id]);
+                    $order_result = $stmt->fetch(PDO::FETCH_ASSOC);
+                    $new_order = $order_result['max_order'] + 1;
+                    
+                    $stmt = $db->prepare("INSERT INTO bio_gallery (user_id, image_url, image_order, created_at) VALUES (?, ?, ?, NOW())");
+                    $stmt->execute([$user_id, '/' . $upload_path, $new_order]);
+                    $uploaded_count++;
+                }
+            }
+        }
+        
+        if ($uploaded_count > 0) {
+            $success = "$uploaded_count image(s) uploaded successfully!";
+        }
+        if (!empty($errors)) {
+            $error = implode(', ', array_unique($errors));
+        }
+        
+        // Refresh gallery images
+        $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
+        $stmt->execute([$user_id]);
+        $gallery_images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_FILES['gallery_images'])) {
         $username = $current_user['username'];
         $display_name = $_POST['display_name'] ?? '';
         $bio_text = $_POST['bio'] ?? '';
@@ -45,7 +136,6 @@ try {
             'facebook', 'instagram', 'twitter', 'linkedin', 'youtube', 'tiktok', 
             'github', 'pinterest', 'snapchat', 'discord', 'twitch', 'telegram', 
             'whatsapp', 'spotify', 'reddit', 'website', 'email', 'phone',
-            // NEW PLATFORMS
             'threads', 'bluesky', 'mastodon', 'medium', 'substack', 'patreon',
             'onlyfans', 'cashapp', 'venmo', 'paypal', 'line'
         ];
@@ -53,6 +143,7 @@ try {
         $social_data = [];
         foreach ($socials as $social) {
             $social_data[$social] = $_POST[$social] ?? '';
+            // FIX: Properly handle unchecked checkboxes
             $social_data[$social . '_enabled'] = isset($_POST[$social . '_enabled']) ? 1 : 0;
         }
         
@@ -80,7 +171,7 @@ try {
             }
         }
         
-        // Handle cover image upload (NEW)
+        // Handle cover image upload
         $cover_image = $bio['cover_image'] ?? '';
         if (isset($_FILES['cover_image']) && $_FILES['cover_image']['error'] === UPLOAD_ERR_OK) {
             $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
@@ -106,10 +197,9 @@ try {
         
         if (empty($error)) {
             try {
-                // Build column list dynamically based on existing columns
+                // Build column list dynamically
                 $base_columns = ['username', 'display_name', 'bio', 'theme_color', 'profile_image'];
                 
-                // Add cover_image if column exists
                 $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE 'cover_image'");
                 if ($stmt->rowCount() > 0) {
                     $base_columns[] = 'cover_image';
@@ -117,7 +207,6 @@ try {
                 
                 $social_columns = [];
                 foreach ($socials as $social) {
-                    // Check if columns exist before adding
                     $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE '$social'");
                     if ($stmt->rowCount() > 0) {
                         $social_columns[] = $social;
@@ -128,7 +217,7 @@ try {
                 $all_columns = array_merge($base_columns, $social_columns);
                 
                 if ($bio) {
-                    // Update existing bio
+                    // Update existing bio - FIX: Properly update all enabled states
                     $set_parts = array_map(function($col) { return "$col = ?"; }, $all_columns);
                     $sql = "UPDATE bio_links SET " . implode(', ', $set_parts) . " WHERE user_id = ?";
                     
@@ -136,9 +225,10 @@ try {
                     if (in_array('cover_image', $base_columns)) {
                         $values[] = $cover_image;
                     }
+                    
+                    // FIX: Add all social data including enabled states
                     foreach ($social_columns as $col) {
-                        $key = str_replace('_enabled', '', $col);
-                        $values[] = isset($social_data[$col]) ? $social_data[$col] : ($social_data[$key] ?? '');
+                        $values[] = $social_data[$col];
                     }
                     $values[] = $user_id;
                     
@@ -154,9 +244,9 @@ try {
                     if (in_array('cover_image', $base_columns)) {
                         $values[] = $cover_image;
                     }
+                    
                     foreach ($social_columns as $col) {
-                        $key = str_replace('_enabled', '', $col);
-                        $values[] = isset($social_data[$col]) ? $social_data[$col] : ($social_data[$key] ?? '');
+                        $values[] = $social_data[$col];
                     }
                     
                     $stmt = $db->prepare($sql);
@@ -196,16 +286,13 @@ try {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
         html { scroll-behavior: smooth; }
-        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             overflow-x: hidden;
         }
-        
         .navbar {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
@@ -216,7 +303,6 @@ try {
             align-items: center;
             border-bottom: 1px solid rgba(255, 255, 255, 0.2);
         }
-        
         .navbar h1 {
             background: linear-gradient(135deg, #6366f1, #8b5cf6);
             -webkit-background-clip: text;
@@ -225,12 +311,7 @@ try {
             font-size: 28px;
             font-weight: 800;
         }
-        
-        .navbar nav {
-            display: flex;
-            gap: 24px;
-        }
-        
+        .navbar nav { display: flex; gap: 24px; }
         .navbar nav a {
             color: #64748b;
             text-decoration: none;
@@ -238,7 +319,6 @@ try {
             transition: all 0.3s;
             position: relative;
         }
-        
         .navbar nav a::after {
             content: '';
             position: absolute;
@@ -249,64 +329,29 @@ try {
             background: linear-gradient(135deg, #6366f1, #8b5cf6);
             transition: width 0.3s;
         }
-        
-        .navbar nav a:hover::after {
-            width: 100%;
-        }
-        
-        .navbar nav a:hover {
-            color: #6366f1;
-        }
-        
+        .navbar nav a:hover::after { width: 100%; }
+        .navbar nav a:hover { color: #6366f1; }
         .container {
             max-width: 900px;
             margin: 40px auto;
             padding: 0 20px;
         }
-        
         .card {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(20px);
             border-radius: 25px;
             padding: 40px;
-            box-shadow: 
-                0 30px 60px rgba(0, 0, 0, 0.25),
-                0 0 1px rgba(0, 0, 0, 0.1),
-                inset 0 1px 0 rgba(255, 255, 255, 0.6);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.25);
             margin-bottom: 24px;
             border: 1px solid rgba(255, 255, 255, 0.7);
             animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
             position: relative;
             overflow: hidden;
         }
-        
         @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(40px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(40px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        
-        .card::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
-            animation: shimmer 3s infinite;
-        }
-        
-        @keyframes shimmer {
-            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
-            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
-        }
-        
         .card h2 {
             color: #1e293b;
             font-size: 28px;
@@ -318,7 +363,6 @@ try {
             position: relative;
             z-index: 1;
         }
-        
         .alert {
             padding: 16px 20px;
             border-radius: 12px;
@@ -329,30 +373,20 @@ try {
             z-index: 1;
             border-left: 5px solid;
         }
-        
         @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        
         .alert-success {
             background: #d1fae5;
             color: #065f46;
             border-left-color: #10b981;
         }
-        
         .alert-error {
             background: #fee2e2;
             color: #7f1d1d;
             border-left-color: #ef4444;
         }
-        
         .info-box {
             background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.15));
             border: 2px solid #6366f1;
@@ -364,12 +398,7 @@ try {
             position: relative;
             z-index: 1;
         }
-        
-        .info-box strong {
-            color: #6366f1;
-            font-size: 16px;
-        }
-        
+        .info-box strong { color: #6366f1; font-size: 16px; }
         .info-box a {
             color: #6366f1;
             text-decoration: none;
@@ -377,17 +406,64 @@ try {
             word-break: break-all;
             transition: all 0.3s;
         }
+        .info-box a:hover { opacity: 0.8; }
         
-        .info-box a:hover {
-            opacity: 0.8;
+        /* GALLERY STYLES */
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
         }
-        
-        .form-group {
-            margin-bottom: 20px;
+        .gallery-item {
             position: relative;
-            z-index: 1;
+            aspect-ratio: 1;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
         }
+        .gallery-item:hover { transform: scale(1.05); }
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .gallery-slot {
+            aspect-ratio: 1;
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+            transition: all 0.3s;
+        }
+        .gallery-slot:hover {
+            border-color: #6366f1;
+            background: #f0f4ff;
+        }
+        .delete-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #ef4444;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 10;
+        }
+        .gallery-item:hover .delete-btn { opacity: 1; }
+        .delete-btn:hover { background: #dc2626; }
         
+        .form-group { margin-bottom: 20px; position: relative; z-index: 1; }
         .form-group label {
             display: block;
             font-weight: 700;
@@ -398,7 +474,6 @@ try {
             align-items: center;
             gap: 8px;
         }
-        
         .form-group input[type="text"],
         .form-group input[type="email"],
         .form-group input[type="tel"],
@@ -414,26 +489,18 @@ try {
             transition: all 0.3s;
             background: white;
         }
-        
-        .form-group input[type="file"] {
-            padding: 10px;
-            cursor: pointer;
-        }
-        
+        .form-group input[type="file"] { padding: 10px; cursor: pointer; }
         .form-group textarea {
             resize: vertical;
             min-height: 120px;
             font-family: inherit;
         }
-        
-        .form-group input:focus,
-        .form-group textarea:focus {
+        .form-group input:focus, .form-group textarea:focus {
             outline: none;
             border-color: #6366f1;
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
             transform: translateY(-2px);
         }
-        
         .toggle-group {
             display: flex;
             align-items: center;
@@ -444,14 +511,12 @@ try {
             border-radius: 10px;
             border-left: 4px solid #6366f1;
         }
-        
         .toggle-group input[type="checkbox"] {
             width: 24px;
             height: 24px;
             cursor: pointer;
             accent-color: #6366f1;
         }
-        
         .toggle-group label {
             margin: 0;
             cursor: pointer;
@@ -459,7 +524,6 @@ try {
             color: #6366f1;
             font-size: 14px;
         }
-        
         .social-section {
             border: 2px solid rgba(99, 102, 241, 0.2);
             border-radius: 18px;
@@ -471,13 +535,11 @@ try {
             position: relative;
             z-index: 1;
         }
-        
         .social-section:hover {
             border-color: #6366f1;
             box-shadow: 0 10px 25px rgba(99, 102, 241, 0.15);
             transform: translateY(-3px);
         }
-        
         .social-section h3 {
             color: #6366f1;
             font-size: 18px;
@@ -487,7 +549,6 @@ try {
             gap: 10px;
             font-weight: 700;
         }
-        
         .btn-primary {
             width: 100%;
             padding: 16px 24px;
@@ -504,7 +565,6 @@ try {
             z-index: 1;
             overflow: hidden;
         }
-        
         .btn-primary::before {
             content: '';
             position: absolute;
@@ -517,21 +577,12 @@ try {
             transform: translate(-50%, -50%);
             transition: width 0.6s, height 0.6s;
         }
-        
-        .btn-primary:hover::before {
-            width: 300px;
-            height: 300px;
-        }
-        
+        .btn-primary:hover::before { width: 300px; height: 300px; }
         .btn-primary:hover {
             transform: translateY(-3px);
             box-shadow: 0 15px 35px rgba(99, 102, 241, 0.4);
         }
-        
-        .btn-primary:active {
-            transform: translateY(-1px);
-        }
-        
+        .btn-primary:active { transform: translateY(-1px); }
         .preview-link {
             display: inline-flex;
             align-items: center;
@@ -548,24 +599,20 @@ try {
             position: relative;
             z-index: 1;
         }
-        
         .preview-link:hover {
             transform: translateY(-2px);
             box-shadow: 0 12px 28px rgba(16, 185, 129, 0.4);
         }
-        
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 20px;
         }
-        
         .color-input-wrapper {
             display: flex;
             align-items: center;
             gap: 12px;
         }
-        
         .form-group input[type="color"] {
             width: 80px;
             height: 50px;
@@ -573,61 +620,27 @@ try {
             cursor: pointer;
             padding: 4px;
         }
-
         .social-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 20px;
             margin-bottom: 40px;
         }
-        
         @media (max-width: 768px) {
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-            
-            .container {
-                padding: 0 10px;
-            }
-            
-            .card {
-                padding: 25px 15px;
-            }
-            
-            .card h2 {
-                font-size: 22px;
-            }
-            
-            .navbar nav {
-                gap: 12px;
-            }
-            
-            .social-section {
-                padding: 16px;
-            }
-
-            .social-grid {
-                grid-template-columns: 1fr;
-            }
+            .form-row { grid-template-columns: 1fr; }
+            .container { padding: 0 10px; }
+            .card { padding: 25px 15px; }
+            .card h2 { font-size: 22px; }
+            .navbar nav { gap: 12px; }
+            .social-section { padding: 16px; }
+            .social-grid { grid-template-columns: 1fr; }
+            .gallery-grid { grid-template-columns: repeat(2, 1fr); }
         }
-        
         @media (max-width: 480px) {
-            .card {
-                padding: 20px 12px;
-            }
-            
-            .card h2 {
-                font-size: 20px;
-            }
-            
-            .navbar h1 {
-                font-size: 20px;
-            }
-            
-            .navbar nav {
-                flex-direction: column;
-                gap: 8px;
-            }
+            .card { padding: 20px 12px; }
+            .card h2 { font-size: 20px; }
+            .navbar h1 { font-size: 20px; }
+            .navbar nav { flex-direction: column; gap: 8px; }
         }
     </style>
 </head>
@@ -642,15 +655,60 @@ try {
     </div>
 
     <div class="container">
+        <!-- Gallery Section (NEW) -->
         <div class="card">
-            <h2><i class="fas fa-id-card"></i> Bio Link Settings</h2>
+            <h2><i class="fas fa-images"></i> Image Gallery (<?= count($gallery_images) ?>/6)</h2>
             
-            <?php if ($success): ?>
+            <?php if ($success && !empty($gallery_images)): ?>
                 <div class="alert alert-success"><i class="fas fa-check-circle"></i> <?= htmlspecialchars($success) ?></div>
             <?php endif; ?>
             
             <?php if ($error): ?>
                 <div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
+            
+            <div class="gallery-grid">
+                <?php foreach ($gallery_images as $img): ?>
+                <div class="gallery-item">
+                    <img src="<?= htmlspecialchars($img['image_url']) ?>" alt="Gallery image">
+                    <a href="?delete_gallery=<?= $img['id'] ?>" 
+                       onclick="return confirm('Delete this image?')" 
+                       class="delete-btn">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+                <?php endforeach; ?>
+                
+                <?php for ($i = 0; $i < (6 - count($gallery_images)); $i++): ?>
+                <div class="gallery-slot">
+                    <i class="fas fa-plus" style="font-size: 32px; color: #cbd5e1;"></i>
+                </div>
+                <?php endfor; ?>
+            </div>
+            
+            <?php if (count($gallery_images) < 6): ?>
+            <form method="POST" enctype="multipart/form-data" style="margin-top: 15px;">
+                <div class="form-group">
+                    <label><i class="fas fa-upload"></i> Upload Images (Max 5MB each)</label>
+                    <input type="file" name="gallery_images[]" accept="image/*" multiple required>
+                </div>
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-upload"></i> Upload Images (<?= 6 - count($gallery_images) ?> slots available)
+                </button>
+            </form>
+            <?php else: ?>
+            <p style="color: #64748b; text-align: center; margin-top: 20px;">
+                <i class="fas fa-info-circle"></i> Gallery full (6/6 images). Delete an image to add new ones.
+            </p>
+            <?php endif; ?>
+        </div>
+
+        <!-- Profile & Social Media Section -->
+        <div class="card">
+            <h2><i class="fas fa-id-card"></i> Bio Link Settings</h2>
+            
+            <?php if ($success && empty($gallery_images)): ?>
+                <div class="alert alert-success"><i class="fas fa-check-circle"></i> <?= htmlspecialchars($success) ?></div>
             <?php endif; ?>
             
             <div class="info-box">
@@ -704,7 +762,7 @@ try {
                 </div>
                 
                 <h2 style="margin-top: 40px; margin-bottom: 24px;"><i class="fas fa-globe"></i> Social Media Links (29 Platforms)</h2>
-                <p style="color: #64748b; margin-bottom: 20px;">💡 <strong>Tip:</strong> Add multiple accounts per platform by updating and saving again!</p>
+                <p style="color: #64748b; margin-bottom: 20px;">💡 <strong>Tip:</strong> Uncheck "Show on bio page" to hide any platform!</p>
                 
                 <div class="social-grid">
                 <?php
@@ -752,7 +810,11 @@ try {
                                value="<?= htmlspecialchars($value) ?>" 
                                placeholder="<?= $platform['placeholder'] ?>">
                         <div class="toggle-group">
-                            <input type="checkbox" name="<?= $key ?>_enabled" id="<?= $key ?>_enabled" <?= $enabled ? 'checked' : '' ?>>
+                            <input type="checkbox" 
+                                   name="<?= $key ?>_enabled" 
+                                   id="<?= $key ?>_enabled" 
+                                   value="1"
+                                   <?= $enabled ? 'checked' : '' ?>>
                             <label for="<?= $key ?>_enabled">Show on bio page</label>
                         </div>
                     </div>
@@ -779,6 +841,16 @@ try {
         
         // Initialize
         updateColorValue();
+        
+        // Prevent accidental form submission when deleting gallery
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (confirm('Are you sure you want to delete this image?')) {
+                    window.location.href = this.href;
+                }
+            });
+        });
     </script>
 </body>
 </html>
