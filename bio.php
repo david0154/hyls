@@ -1,5 +1,5 @@
 <?php
-// bio.php - Bio link display page with FIXED blocking and ad display
+// bio.php - Bio link display page with FIXED link blocking and ad display
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
@@ -137,45 +137,7 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
         }
         .container { max-width: 700px; width: 100%; z-index: 1; }
         
-        /* Advertisement Styles */
-        .ad-container {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            border: 2px solid rgba(255, 193, 7, 0.5);
-            text-align: center;
-        }
-        .ad-container .ad-label {
-            font-size: 10px;
-            color: #999;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 10px;
-        }
-        .ad-container img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 10px;
-            margin-bottom: 10px;
-        }
-        .ad-container a {
-            display: inline-block;
-            padding: 10px 20px;
-            background: linear-gradient(135deg, #ffc107, #ff9800);
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 700;
-            transition: all 0.3s;
-        }
-        .ad-container a:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(255, 193, 7, 0.4);
-        }
-        
+        /* Cover Image */
         .cover-image {
             width: 100%;
             height: 200px;
@@ -268,22 +230,58 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             border-left: 4px solid <?= htmlspecialchars($bio['theme_color']) ?>;
         }
         
-        /* Blocked Link Message */
-        .blocked-message {
-            background: rgba(239, 68, 68, 0.1);
-            border: 2px solid #ef4444;
-            color: #7f1d1d;
-            padding: 12px 20px;
-            border-radius: 12px;
-            margin-top: 15px;
-            font-weight: 600;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            justify-content: center;
+        /* Advertisement */
+        .ad-container {
+            background: linear-gradient(135deg, #fff5f5, #fffbeb);
+            border: 2px dashed #fbbf24;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 25px 0;
+            text-align: center;
+            transition: transform 0.3s;
         }
+        .ad-container:hover { transform: scale(1.02); }
+        .ad-label {
+            font-size: 11px;
+            color: #f59e0b;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        .ad-image {
+            width: 100%;
+            max-height: 200px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        .ad-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 10px 0;
+        }
+        .ad-description {
+            font-size: 14px;
+            color: #64748b;
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+        .ad-cta {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #f59e0b, #f97316);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 700;
+            margin-top: 10px;
+            transition: transform 0.3s;
+        }
+        .ad-cta:hover { transform: translateY(-2px); }
         
+        /* Gallery */
         .gallery-section {
             margin: 25px 0;
         }
@@ -364,6 +362,23 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             filter: brightness(1.1);
         }
         
+        /* Blocked link styling */
+        .social-btn.blocked {
+            background: #e2e8f0;
+            cursor: not-allowed;
+            opacity: 0.5;
+            position: relative;
+        }
+        .social-btn.blocked::after {
+            content: '🚫';
+            position: absolute;
+            font-size: 20px;
+        }
+        .social-btn.blocked:hover {
+            transform: none;
+            filter: none;
+        }
+        
         .social-btn .custom-icon {
             font-size: 16px;
             font-weight: 900;
@@ -397,6 +412,15 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             transform: translateY(-4px);
             box-shadow: 0 12px 25px rgba(0, 0, 0, 0.25);
             filter: brightness(1.05);
+        }
+        .contact-btn.blocked {
+            background: #e2e8f0;
+            color: #64748b;
+            cursor: not-allowed;
+        }
+        .contact-btn.blocked:hover {
+            transform: none;
+            filter: none;
         }
         .powered-by {
             text-align: center;
@@ -440,28 +464,6 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
 </head>
 <body>
     <div class="container">
-        <?php if ($ad): ?>
-        <div class="ad-container">
-            <div class="ad-label">Advertisement</div>
-            <?php if (!empty($ad['image_url'])): ?>
-                <img src="<?= htmlspecialchars($ad['image_url']) ?>" alt="<?= htmlspecialchars($ad['title']) ?>">
-            <?php endif; ?>
-            <div style="margin: 10px 0; font-weight: 600; color: #333;">
-                <?= htmlspecialchars($ad['title']) ?>
-            </div>
-            <?php if (!empty($ad['description'])): ?>
-                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">
-                    <?= htmlspecialchars($ad['description']) ?>
-                </p>
-            <?php endif; ?>
-            <?php if (!empty($ad['link_url'])): ?>
-                <a href="<?= htmlspecialchars($ad['link_url']) ?>" target="_blank" rel="noopener">
-                    Learn More <i class="fas fa-arrow-right"></i>
-                </a>
-            <?php endif; ?>
-        </div>
-        <?php endif; ?>
-        
         <div class="profile-card">
             <?php if (!empty($bio['cover_image'])): ?>
             <img src="<?= htmlspecialchars(SITE_URL) ?>/<?= htmlspecialchars($bio['cover_image']) ?>" alt="Cover" class="cover-image" loading="lazy">
@@ -486,6 +488,22 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             <p class="bio-text"><?= nl2br(htmlspecialchars($bio['bio'])) ?></p>
             <?php endif; ?>
             
+            <?php if ($ad): ?>
+            <div class="ad-container">
+                <div class="ad-label">📢 Sponsored</div>
+                <?php if (!empty($ad['image_url'])): ?>
+                <img src="<?= htmlspecialchars($ad['image_url']) ?>" alt="<?= htmlspecialchars($ad['title']) ?>" class="ad-image">
+                <?php endif; ?>
+                <div class="ad-title"><?= htmlspecialchars($ad['title']) ?></div>
+                <?php if (!empty($ad['description'])): ?>
+                <div class="ad-description"><?= htmlspecialchars($ad['description']) ?></div>
+                <?php endif; ?>
+                <a href="<?= htmlspecialchars($ad['url']) ?>" target="_blank" rel="noopener sponsored" class="ad-cta">
+                    <?= htmlspecialchars($ad['cta_text'] ?? 'Visit Now') ?>
+                </a>
+            </div>
+            <?php endif; ?>
+            
             <?php if (!empty($gallery_images)): ?>
             <div class="divider"></div>
             <div class="section-title"><i class="fas fa-images"></i> Gallery</div>
@@ -501,6 +519,7 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             <?php endif; ?>
             
             <?php
+            // ALL 29 PLATFORMS WITH PROPER ICONS
             $socials = [
                 'facebook' => ['icon' => 'fab fa-facebook-f', 'text' => ''],
                 'instagram' => ['icon' => 'fab fa-instagram', 'text' => ''],
@@ -532,14 +551,15 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             ];
             
             $has_socials = false;
-            $has_blocked = false;
+            $has_enabled_socials = false;
             foreach ($socials as $platform => $data) {
                 if (!empty($bio[$platform])) {
+                    $has_socials = true;
+                    // Check if enabled (default to true if column doesn't exist)
                     $enabled = isset($bio[$platform . '_enabled']) ? ($bio[$platform . '_enabled'] == 1) : true;
                     if ($enabled) {
-                        $has_socials = true;
-                    } else {
-                        $has_blocked = true;
+                        $has_enabled_socials = true;
+                        break;
                     }
                 }
             }
@@ -554,21 +574,25 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
                     $url = $bio[$platform] ?? '';
                     
                     if (!empty($url)) {
+                        // Check if link is enabled (default to true if column doesn't exist)
                         $enabled = isset($bio[$platform . '_enabled']) ? ($bio[$platform . '_enabled'] == 1) : true;
                         
+                        if ($platform === 'website' && !preg_match('/^https?:\/\//i', $url)) {
+                            $url = 'https://' . $url;
+                        }
+                        
+                        $icon_html = '';
+                        if (!empty($data['icon'])) {
+                            $icon_html = '<i class="' . htmlspecialchars($data['icon']) . '"></i>';
+                        } else if (!empty($data['text'])) {
+                            $icon_html = '<span class="custom-icon">' . htmlspecialchars($data['text']) . '</span>';
+                        }
+                        
                         if ($enabled) {
-                            if ($platform === 'website' && !preg_match('/^https?:\/\//i', $url)) {
-                                $url = 'https://' . $url;
-                            }
-                            
-                            $icon_html = '';
-                            if (!empty($data['icon'])) {
-                                $icon_html = '<i class="' . htmlspecialchars($data['icon']) . '"></i>';
-                            } else if (!empty($data['text'])) {
-                                $icon_html = '<span class="custom-icon">' . htmlspecialchars($data['text']) . '</span>';
-                            }
-                            
                             echo '<a href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener" class="social-btn" title="' . ucfirst($platform) . '">' . $icon_html . '</a>';
+                        } else {
+                            // Show blocked link with disabled styling
+                            echo '<span class="social-btn blocked" title="' . ucfirst($platform) . ' (Blocked)">' . $icon_html . '</span>';
                         }
                     }
                 }
@@ -576,30 +600,39 @@ $adjusted_color = function_exists('adjustColor') ? adjustColor($bio['theme_color
             </div>
             <?php endif; ?>
             
-            <?php if ($has_blocked): ?>
-            <div class="blocked-message">
-                <i class="fas fa-ban"></i> Some social links are currently hidden by the owner
-            </div>
-            <?php endif; ?>
-            
             <?php 
-            $has_email = !empty($bio['email']) && (isset($bio['email_enabled']) ? ($bio['email_enabled'] == 1) : true);
-            $has_phone = !empty($bio['phone']) && (isset($bio['phone_enabled']) ? ($bio['phone_enabled'] == 1) : true);
+            $has_email = !empty($bio['email']);
+            $has_phone = !empty($bio['phone']);
+            $email_enabled = isset($bio['email_enabled']) ? ($bio['email_enabled'] == 1) : true;
+            $phone_enabled = isset($bio['phone_enabled']) ? ($bio['phone_enabled'] == 1) : true;
+            
             if ($has_email || $has_phone): 
             ?>
             <div class="divider"></div>
             <div class="section-title"><i class="fas fa-address-card"></i> Contact</div>
             <div class="contact-links">
                 <?php if ($has_email): ?>
-                <a href="mailto:<?= htmlspecialchars($bio['email']) ?>" class="contact-btn">
-                    <i class="fas fa-envelope"></i> Email Me
-                </a>
+                    <?php if ($email_enabled): ?>
+                    <a href="mailto:<?= htmlspecialchars($bio['email']) ?>" class="contact-btn">
+                        <i class="fas fa-envelope"></i> Email Me
+                    </a>
+                    <?php else: ?>
+                    <span class="contact-btn blocked" title="Email Blocked">
+                        <i class="fas fa-envelope"></i> Email (Blocked)
+                    </span>
+                    <?php endif; ?>
                 <?php endif; ?>
                 
                 <?php if ($has_phone): ?>
-                <a href="tel:<?= htmlspecialchars($bio['phone']) ?>" class="contact-btn">
-                    <i class="fas fa-phone"></i> Call Me
-                </a>
+                    <?php if ($phone_enabled): ?>
+                    <a href="tel:<?= htmlspecialchars($bio['phone']) ?>" class="contact-btn">
+                        <i class="fas fa-phone"></i> Call Me
+                    </a>
+                    <?php else: ?>
+                    <span class="contact-btn blocked" title="Phone Blocked">
+                        <i class="fas fa-phone"></i> Phone (Blocked)
+                    </span>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
             <?php endif; ?>
