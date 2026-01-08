@@ -34,7 +34,7 @@ try {
     $stmt->execute([$user_id]);
     $bio = $stmt->fetch();
 
-    // NEW: Get gallery images
+    // Get gallery images
     $gallery_images = [];
     try {
         $stmt = $db->prepare("SELECT * FROM bio_gallery WHERE user_id = ? ORDER BY image_order ASC LIMIT 6");
@@ -44,7 +44,7 @@ try {
         // Table doesn't exist yet, ignore
     }
 
-    // NEW: Handle gallery delete
+    // Handle gallery delete
     if (isset($_GET['delete_gallery'])) {
         $image_id = (int)$_GET['delete_gallery'];
         
@@ -69,7 +69,7 @@ try {
         }
     }
 
-    // NEW: Handle gallery upload
+    // Handle gallery upload
     if (isset($_FILES['gallery_images'])) {
         $uploaded_count = 0;
         $errors = [];
@@ -149,10 +149,13 @@ try {
             'onlyfans', 'cashapp', 'venmo', 'paypal', 'line'
         ];
         
+        // CRITICAL FIX: Collect data properly
         $social_data = [];
         foreach ($socials as $social) {
-            $social_data[$social] = $_POST[$social] ?? '';
-            // FIX: Properly handle checkbox - isset() for checkboxes, not value
+            // Get URL value
+            $social_data[$social] = trim($_POST[$social] ?? '');
+            
+            // Get enabled state - FIXED: isset() properly checks checkbox
             $social_data[$social . '_enabled'] = isset($_POST[$social . '_enabled']) ? 1 : 0;
         }
         
@@ -215,20 +218,26 @@ try {
                     $base_columns[] = 'cover_image';
                 }
                 
+                // CRITICAL FIX: Build social columns list in exact order
                 $social_columns = [];
                 foreach ($socials as $social) {
-                    // Check if columns exist before adding
+                    // Check if base column exists
                     $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE '$social'");
                     if ($stmt->rowCount() > 0) {
                         $social_columns[] = $social;
-                        $social_columns[] = $social . '_enabled';
+                        
+                        // Check if enabled column exists
+                        $stmt = $db->query("SHOW COLUMNS FROM bio_links LIKE '{$social}_enabled'");
+                        if ($stmt->rowCount() > 0) {
+                            $social_columns[] = $social . '_enabled';
+                        }
                     }
                 }
                 
                 $all_columns = array_merge($base_columns, $social_columns);
                 
                 if ($bio) {
-                    // Update existing bio - FIX: Properly pass enabled values
+                    // Update existing bio
                     $set_parts = array_map(function($col) { return "$col = ?"; }, $all_columns);
                     $sql = "UPDATE bio_links SET " . implode(', ', $set_parts) . " WHERE user_id = ?";
                     
@@ -237,8 +246,9 @@ try {
                         $values[] = $cover_image;
                     }
                     
-                    // FIX: Add values in correct order matching social_columns
+                    // CRITICAL FIX: Add values in EXACT order of social_columns
                     foreach ($social_columns as $col) {
+                        // Each column in social_columns is either 'platform' or 'platform_enabled'
                         $values[] = $social_data[$col];
                     }
                     $values[] = $user_id;
@@ -256,6 +266,7 @@ try {
                         $values[] = $cover_image;
                     }
                     
+                    // Add values in EXACT order of social_columns
                     foreach ($social_columns as $col) {
                         $values[] = $social_data[$col];
                     }
@@ -433,7 +444,7 @@ try {
         }
         .info-box a:hover { opacity: 0.8; }
         
-        /* NEW: GALLERY STYLES */
+        /* GALLERY STYLES */
         .gallery-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -680,8 +691,8 @@ try {
     </div>
 
     <div class="container">
-        <!-- NEW: Gallery Section -->
-        <?php if (!empty($gallery_images) || true): // Always show gallery section ?>
+        <!-- Gallery Section -->
+        <?php if (!empty($gallery_images) || true): ?>
         <div class="card">
             <h2><i class="fas fa-images"></i> Image Gallery (<?= count($gallery_images) ?>/6)</h2>
             
