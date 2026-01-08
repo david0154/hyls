@@ -135,7 +135,7 @@ After installation, the install.php file should be deleted or moved for security
 
 ### HypeChats OAuth Setup
 
-1. Visit HypeChats Developer Portal
+1. Visit HypeChats Developer Portal  `https://hypechats.com/` Login/Sinup and go `https://hypechats.com/developers`
 2. Create new application
 3. Set redirect URI: `https://yourdomain.com/auth.php`
 4. Copy App ID and App Secret to `config.php`
