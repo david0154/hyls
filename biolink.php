@@ -708,7 +708,7 @@ try {
 </head>
 <body>
     <div class="navbar">
-        <h1>🔗 <?= SITE_NAME ?></h1>
+        <h1>ðŸ”— <?= SITE_NAME ?></h1>
         <nav>
             <a href="dashboard.php">Dashboard</a>
             <a href="biolink.php">Bio Link</a>
@@ -777,7 +777,7 @@ try {
             <?php endif; ?>
             
             <div class="info-box">
-                <strong>✨ Your bio link URL:</strong><br>
+                <strong>âœ¨ Your bio link URL:</strong><br>
                 <a href="<?= SITE_URL ?>/bio/<?= htmlspecialchars($current_user['username']) ?>" target="_blank">
                     <?= SITE_URL ?>/bio/<strong><?= htmlspecialchars($current_user['username']) ?></strong>
                 </a>
@@ -827,7 +827,7 @@ try {
                 </div>
                 
                 <h2 style="margin-top: 40px; margin-bottom: 24px;"><i class="fas fa-globe"></i> Social Media Links (29 Platforms)</h2>
-                <p style="color: #64748b; margin-bottom: 20px;">💡 <strong>Tip:</strong> Uncheck "Show on bio page" to hide any platform!</p>
+                <p style="color: #64748b; margin-bottom: 20px;">ðŸ’¡ <strong>Tip:</strong> Uncheck "Show on bio page" to hide any platform!</p>
                 
                 <div class="social-grid">
                 <?php
