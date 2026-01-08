@@ -3,7 +3,7 @@ session_start();
 
 // ===========================
 // COMPLETE INSTALLATION WIZARD WITH AUTO-MIGRATIONS
-// Includes: cover_image, 29 platforms, 6-image gallery
+// Includes: cover_image, 29 platforms, 6-image gallery, SOCIAL VIDEOS, image crop
 // Auto-fixes existing databases
 // ===========================
 
@@ -152,48 +152,149 @@ function run_all_migrations($pdo) {
                 user_id INT NOT NULL,
                 image_url VARCHAR(500) NOT NULL,
                 image_order INT DEFAULT 0,
+                crop_x INT DEFAULT 0,
+                crop_y INT DEFAULT 0,
+                crop_width INT DEFAULT NULL,
+                crop_height INT DEFAULT NULL,
+                original_width INT DEFAULT NULL,
+                original_height INT DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                 INDEX idx_user_id (user_id),
                 INDEX idx_order (image_order)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
             $pdo->exec($sql);
-            $migrations[] = '✅ Created bio_gallery table (6 images)';
+            $migrations[] = '✅ Created bio_gallery table (with crop support)';
+        } else {
+            // Add crop columns if table exists
+            $crop_columns = ['crop_x', 'crop_y', 'crop_width', 'crop_height', 'original_width', 'original_height'];
+            foreach ($crop_columns as $col) {
+                $stmt = $pdo->query("SHOW COLUMNS FROM bio_gallery LIKE '$col'");
+                if ($stmt->rowCount() == 0) {
+                    $default = ($col == 'crop_x' || $col == 'crop_y') ? '0' : 'NULL';
+                    $pdo->exec("ALTER TABLE bio_gallery ADD COLUMN $col INT DEFAULT $default");
+                    $migrations[] = "✅ Added $col to bio_gallery";
+                }
+            }
         }
 
-        // 6. Create bio_custom_links table
+        // 6. Create bio_profiles table (for video feature)
+        $stmt = $pdo->query("SHOW TABLES LIKE 'bio_profiles'");
+        if ($stmt->rowCount() == 0) {
+            $sql = "CREATE TABLE bio_profiles (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                username VARCHAR(50) NOT NULL UNIQUE,
+                display_name VARCHAR(100) DEFAULT NULL,
+                bio TEXT DEFAULT NULL,
+                profile_picture VARCHAR(255) DEFAULT NULL,
+                cover_image VARCHAR(255) DEFAULT NULL,
+                cover_crop_x INT DEFAULT 0,
+                cover_crop_y INT DEFAULT 0,
+                cover_crop_width INT DEFAULT NULL,
+                cover_crop_height INT DEFAULT NULL,
+                theme_color VARCHAR(7) DEFAULT '#6366f1',
+                views INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_username (username),
+                INDEX idx_user_id (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+            $pdo->exec($sql);
+            $migrations[] = '✅ Created bio_profiles table';
+        } else {
+            // Add cover crop columns if missing
+            $cover_crop_cols = ['cover_crop_x', 'cover_crop_y', 'cover_crop_width', 'cover_crop_height'];
+            foreach ($cover_crop_cols as $col) {
+                $stmt = $pdo->query("SHOW COLUMNS FROM bio_profiles LIKE '$col'");
+                if ($stmt->rowCount() == 0) {
+                    $default = (strpos($col, '_x') !== false || strpos($col, '_y') !== false) ? '0' : 'NULL';
+                    $pdo->exec("ALTER TABLE bio_profiles ADD COLUMN $col INT DEFAULT $default");
+                    $migrations[] = "✅ Added $col to bio_profiles";
+                }
+            }
+        }
+
+        // 7. Create bio_social_videos table (NEW: Social Media Videos)
+        $stmt = $pdo->query("SHOW TABLES LIKE 'bio_social_videos'");
+        if ($stmt->rowCount() == 0) {
+            $sql = "CREATE TABLE bio_social_videos (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                bio_profile_id INT NOT NULL,
+                platform VARCHAR(50) NOT NULL,
+                video_url TEXT NOT NULL,
+                embed_code TEXT NOT NULL,
+                title VARCHAR(255) DEFAULT NULL,
+                description TEXT DEFAULT NULL,
+                thumbnail_url VARCHAR(500) DEFAULT NULL,
+                display_order INT DEFAULT 0,
+                autoplay TINYINT(1) DEFAULT 1,
+                views INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_profile_id (bio_profile_id),
+                INDEX idx_platform (platform),
+                INDEX idx_display_order (display_order)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+            $pdo->exec($sql);
+            $migrations[] = '✅ Created bio_social_videos table (YouTube, Facebook, Instagram, TikTok, etc.)';
+        }
+
+        // 8. Create bio_social_links table
+        $stmt = $pdo->query("SHOW TABLES LIKE 'bio_social_links'");
+        if ($stmt->rowCount() == 0) {
+            $sql = "CREATE TABLE bio_social_links (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                bio_profile_id INT NOT NULL,
+                platform VARCHAR(50) NOT NULL,
+                username VARCHAR(100) NOT NULL,
+                url VARCHAR(500) NOT NULL,
+                label VARCHAR(100) DEFAULT NULL,
+                display_order INT DEFAULT 0,
+                clicks INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_profile_id (bio_profile_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+            $pdo->exec($sql);
+            $migrations[] = '✅ Created bio_social_links table';
+        }
+
+        // 9. Create bio_custom_links table
         $stmt = $pdo->query("SHOW TABLES LIKE 'bio_custom_links'");
         if ($stmt->rowCount() == 0) {
             $sql = "CREATE TABLE bio_custom_links (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
+                bio_profile_id INT NOT NULL,
                 title VARCHAR(100) NOT NULL,
                 url VARCHAR(500) NOT NULL,
                 description TEXT NULL,
                 icon VARCHAR(50) DEFAULT 'fa-link',
                 clicks INT DEFAULT 0,
-                link_order INT DEFAULT 0,
+                display_order INT DEFAULT 0,
                 is_active TINYINT DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                INDEX idx_user_active (user_id, is_active)
+                INDEX idx_profile_active (bio_profile_id, is_active)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
             $pdo->exec($sql);
             $migrations[] = '✅ Created bio_custom_links table';
         }
 
-        // 7. Create directories
-        if (!is_dir('uploads')) {
-            mkdir('uploads', 0755, true);
-            $migrations[] = '✅ Created uploads directory';
-        }
-        if (!is_dir('uploads/bio')) {
-            mkdir('uploads/bio', 0755, true);
-            $migrations[] = '✅ Created uploads/bio directory';
-        }
-        if (!is_dir('uploads/bio/gallery')) {
-            mkdir('uploads/bio/gallery', 0755, true);
-            $migrations[] = '✅ Created uploads/bio/gallery directory';
+        // 10. Create directories
+        $directories = [
+            'uploads',
+            'uploads/bio',
+            'uploads/bio/gallery',
+            'uploads/images',
+            'uploads/profiles',
+            'uploads/ads'
+        ];
+        
+        foreach ($directories as $dir) {
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+                $migrations[] = "✅ Created $dir directory";
+            }
         }
         
     } catch (Exception $e) {
@@ -256,7 +357,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->exec("CREATE DATABASE IF NOT EXISTS `$db_name` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
             $pdo->exec("USE `$db_name`");
             
-            // COMPLETE DATABASE SCHEMA WITH ALL FEATURES
+            // COMPLETE DATABASE SCHEMA WITH ALL FEATURES INCLUDING VIDEOS
             $sql = "
             CREATE TABLE users (
               id INT AUTO_INCREMENT PRIMARY KEY,
@@ -368,11 +469,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               INDEX idx_username (username)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+            CREATE TABLE bio_profiles (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              user_id INT NOT NULL,
+              username VARCHAR(50) NOT NULL UNIQUE,
+              display_name VARCHAR(100) DEFAULT NULL,
+              bio TEXT DEFAULT NULL,
+              profile_picture VARCHAR(255) DEFAULT NULL,
+              cover_image VARCHAR(255) DEFAULT NULL,
+              cover_crop_x INT DEFAULT 0,
+              cover_crop_y INT DEFAULT 0,
+              cover_crop_width INT DEFAULT NULL,
+              cover_crop_height INT DEFAULT NULL,
+              theme_color VARCHAR(7) DEFAULT '#6366f1',
+              views INT DEFAULT 0,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+              INDEX idx_username (username),
+              INDEX idx_user_id (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+            CREATE TABLE bio_social_videos (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              bio_profile_id INT NOT NULL,
+              platform VARCHAR(50) NOT NULL,
+              video_url TEXT NOT NULL,
+              embed_code TEXT NOT NULL,
+              title VARCHAR(255) DEFAULT NULL,
+              description TEXT DEFAULT NULL,
+              thumbnail_url VARCHAR(500) DEFAULT NULL,
+              display_order INT DEFAULT 0,
+              autoplay TINYINT(1) DEFAULT 1,
+              views INT DEFAULT 0,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              INDEX idx_profile_id (bio_profile_id),
+              INDEX idx_platform (platform),
+              INDEX idx_display_order (display_order)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+            CREATE TABLE bio_social_links (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              bio_profile_id INT NOT NULL,
+              platform VARCHAR(50) NOT NULL,
+              username VARCHAR(100) NOT NULL,
+              url VARCHAR(500) NOT NULL,
+              label VARCHAR(100) DEFAULT NULL,
+              display_order INT DEFAULT 0,
+              clicks INT DEFAULT 0,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              INDEX idx_profile_id (bio_profile_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
             CREATE TABLE bio_gallery (
               id INT AUTO_INCREMENT PRIMARY KEY,
               user_id INT NOT NULL,
               image_url VARCHAR(500) NOT NULL,
               image_order INT DEFAULT 0,
+              crop_x INT DEFAULT 0,
+              crop_y INT DEFAULT 0,
+              crop_width INT DEFAULT NULL,
+              crop_height INT DEFAULT NULL,
+              original_width INT DEFAULT NULL,
+              original_height INT DEFAULT NULL,
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
               FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
               INDEX idx_user_id (user_id),
@@ -381,17 +541,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             CREATE TABLE bio_custom_links (
               id INT AUTO_INCREMENT PRIMARY KEY,
-              user_id INT NOT NULL,
+              bio_profile_id INT NOT NULL,
               title VARCHAR(100) NOT NULL,
               url VARCHAR(500) NOT NULL,
               description TEXT NULL,
               icon VARCHAR(50) DEFAULT 'fa-link',
               clicks INT DEFAULT 0,
-              link_order INT DEFAULT 0,
+              display_order INT DEFAULT 0,
               is_active TINYINT DEFAULT 1,
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-              INDEX idx_user_active (user_id, is_active)
+              INDEX idx_profile_active (bio_profile_id, is_active)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
             CREATE TABLE settings (
@@ -448,14 +607,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             chmod('config.php', 0644);
             
             // Create upload directories
-            if (!is_dir('uploads')) mkdir('uploads', 0755, true);
-            if (!is_dir('uploads/profiles')) mkdir('uploads/profiles', 0755, true);
-            if (!is_dir('uploads/bio')) mkdir('uploads/bio', 0755, true);
-            if (!is_dir('uploads/bio/gallery')) mkdir('uploads/bio/gallery', 0755, true);
-            if (!is_dir('uploads/ads')) mkdir('uploads/ads', 0755, true);
+            $directories = [
+                'uploads',
+                'uploads/profiles',
+                'uploads/bio',
+                'uploads/bio/gallery',
+                'uploads/ads',
+                'uploads/images'
+            ];
             
-            $success = '✅ HYLS installed successfully with all features!<br><br>✨ Includes:<br>- 29 social platforms<br>- 6-image gallery<br>- Cover images<br>- Link banning<br>- Password protection<br><br>Redirecting...';
-            echo "<script>setTimeout(function(){ window.location.href='index.php'; }, 3000);</script>";
+            foreach ($directories as $dir) {
+                if (!is_dir($dir)) {
+                    mkdir($dir, 0755, true);
+                }
+            }
+            
+            $success = '✅ HYLS installed successfully with ALL features!<br><br>✨ Includes:<br>- 29 social platforms<br>- 6-image gallery with crop<br>- Social media video embeds (YouTube, Facebook, Instagram, TikTok, etc.)<br>- Cover images with crop<br>- Link banning<br>- Password protection<br>- Image upload (12MB limit)<br>- Autoplay videos<br><br>Redirecting...';
+            echo "<script>setTimeout(function(){ window.location.href='index.php'; }, 4000);</script>";
             
         } catch (Exception $e) {
             $error = 'Installation failed: ' . $e->getMessage();
@@ -572,6 +740,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-weight: 600;
             margin: 4px;
         }
+        .new-badge {
+            background: #dcfce7;
+            color: #16a34a;
+        }
     </style>
 </head>
 <body>
@@ -589,6 +761,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <span class="feature-badge">✅ Cover Image</span>
                 <span class="feature-badge">✅ 29 Platforms</span>
                 <span class="feature-badge">✅ 6 Images Gallery</span>
+                <span class="feature-badge new-badge">🆕 Video Embeds</span>
+                <span class="feature-badge new-badge">🆕 Image Crop (12MB)</span>
                 <span class="feature-badge">✅ Link Banning</span>
                 <span class="feature-badge">✅ Password Links</span>
                 <span class="feature-badge">✅ Link Expiry</span>
@@ -622,6 +796,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="info-box">
                 <strong>🎉 Fresh Installation</strong><br>
                 Complete setup with all features included!
+                <div style="margin-top: 12px;">
+                    <span class="feature-badge new-badge">🆕 YouTube/Facebook/Instagram Videos</span>
+                    <span class="feature-badge new-badge">🆕 Autoplay Support</span>
+                    <span class="feature-badge new-badge">🆕 Image Crop (12MB)</span>
+                </div>
             </div>
             
             <h3 style="color: #1e293b; margin: 30px 0 15px;">Database Configuration</h3>
@@ -677,7 +856,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             
             <button type="submit">
-                🚀 Install HYLS (Complete Setup)
+                🚀 Install HYLS (Complete Setup with Videos)
             </button>
         </form>
         <?php endif; ?>
